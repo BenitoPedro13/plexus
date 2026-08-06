@@ -1,0 +1,28 @@
+# Node
+node_modules/
+.pnpm-store/
+dist/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+
+# Go
+workers/bin/
+workers/worker
+workers/**/*.exe
+workers/**/*.test
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/

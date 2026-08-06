@@ -1,0 +1,8 @@
+{
+  "name": "plexus",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.5.2"
+}
