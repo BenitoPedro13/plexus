@@ -62,7 +62,7 @@ MVP) is a shippable milestone on its own.
 | Final export / batch render | Go — the same recipe executed server-side at full resolution; one execution engine backs both preview (approximately) and output (exactly) |
 | Plugin contract | **gRPC (protobuf)** — `Process(input) -> output`, language-agnostic, registered at runtime |
 | Queue + event bus | **NATS JetStream** — persistent, replayable; one piece of infra for both job dispatch and the realtime progress stream (deliberately not RabbitMQ) |
-| Data | **PostgreSQL** — jobs, pipelines, recipes, plugin registry |
+| Data | **PostgreSQL** via **Drizzle ORM** (`drizzle-orm/node-postgres`) — jobs, pipelines, recipes, plugin registry. Chosen over Prisma specifically because Prisma still has no native PostGIS geometry/geography support (`TASK-job-state-machine.md`); SQL-first Drizzle doesn't block a future Places/map view built on photo GPS EXIF data |
 | Objects | **MinIO / S3-compatible** — presigned-URL upload/download, never proxy large files through the API (self-hosted vs managed is an open question) |
 | Realtime | SSE/WebSocket fan-out to the frontend, driven off the same NATS event stream used for dispatch |
 
@@ -357,6 +357,19 @@ unused).
 that stays a *contract* instead of dissolving into copy-paste — and, combined with the
 no-mocking rule, tests that can actually catch lost jobs and preview/export drift.
 
+### 4.1 Commit conventions
+
+- **Commit automatically once a task doc's work is complete and verified** (build/lint/tests
+  passing per its own scope) — don't wait to be asked for each one. This is a standing
+  authorization for this repo, scoped to work that followed the task-doc process in §1; it
+  is not blanket permission for destructive git operations (force-push, `reset --hard`,
+  etc.), which still require explicit confirmation per the general git safety rules.
+- **Never add a `Co-Authored-By` trailer to commits in this repo.** No exceptions.
+
+**Why:** the task-doc-first workflow (§1) already gets alignment before code is written, so
+withholding the commit afterward adds a redundant approval step without adding safety. The
+no-co-author rule is a standing preference, not situational.
+
 ---
 
 ## TL;DR
@@ -366,9 +379,9 @@ no-mocking rule, tests that can actually catch lost jobs and preview/export drif
 | **Stack** | Next.js + WebGPU editor, NestJS orchestrator, Go workers (ffmpeg/libvips), gRPC plugins, NATS JetStream, Postgres, MinIO/S3 (spec-decided; `apps/orchestrator` + `workers/` scaffolded, rest phased in) | Polyglot monorepo: `apps/web` (proposed), `apps/orchestrator` (scaffolded), `workers/` (scaffolded), `proto/` (proposed), `packages/` (proposed) |
 | **Before** | Write a task document first — including for the initial scaffold | `docs/tasks/TASK-<slug>.md` with: current scenario, planned changes (file by file), why, affected-files table |
 | **During** | Use CLIs / generators / SDKs — ffmpeg/libvips for media, `buf`/protoc for gRPC stubs, framework CLIs for scaffolds; never hand-rolled media processing or hand-synced contracts | Canonical, reproducible output; `[VERIFY: ...]` inline for anything unconfirmed |
-| **After** | Update all affected documentation, including the deferred register | `CLAUDE.md`, `docs/plexus-media-pipeline-spec.md`, `docs/90-deferred-register.md` (`V-xx`/`D-xx`), regenerated proto stubs, `.env.example` |
+| **After** | Update all affected documentation, including the deferred register; then commit — auto-committed once verified, never with a `Co-Authored-By` trailer (§4.1) | `CLAUDE.md`, `docs/plexus-media-pipeline-spec.md`, `docs/90-deferred-register.md` (`V-xx`/`D-xx`), regenerated proto stubs, `.env.example`, a commit |
 
-**The loop:** plan → align → build with tooling → document → done. **Never broken:**
+**The loop:** plan → align → build with tooling → document → commit → done. **Never broken:**
 non-destructive editing (parameters, never pixel mutations), recipe/pipeline unification
 (an editor recipe runs unmodified as a batch pipeline), no lost jobs (a killed worker's job
 is picked up by another replica).
