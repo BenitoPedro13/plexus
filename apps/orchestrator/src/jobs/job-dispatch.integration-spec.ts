@@ -119,4 +119,59 @@ describe('JobDispatchService (integration, real Postgres + real NATS)', () => {
     expect(payload.inputRef).toBe('/tmp/resized.jpg');
     second!.ack();
   });
+
+  it('dispatches every ready step in the same call (fan-out — TASK-branching-parallel-dags.md)', async () => {
+    const pipeline = await pipelinesService.create({
+      name: 'fan-out-dispatch',
+      steps: [
+        { id: 'root', processor: 'image.resize', params: {} },
+        {
+          id: 'a',
+          processor: 'image.compress',
+          params: {},
+          dependsOn: ['root'],
+        },
+        {
+          id: 'b',
+          processor: 'image.convert',
+          params: { format: 'webp' },
+          dependsOn: ['root'],
+        },
+      ],
+    });
+
+    const job = await jobsService.create({
+      pipelineId: pipeline.id,
+      inputRef: '/tmp/fan-out-input.jpg',
+    });
+
+    const rootMsg = await consumer.next({ expires: 5_000 });
+    rootMsg!.ack();
+
+    const [rootStep] = job.steps;
+    await transitionJobStepStatus(
+      testDb.dbService.db,
+      rootStep.id,
+      'COMPLETE',
+      {
+        outputRef: '/tmp/root-output.jpg',
+      },
+    );
+    await jobDispatchService.dispatchNext(job.id);
+
+    const first = await consumer.next({ expires: 5_000 });
+    const second = await consumer.next({ expires: 5_000 });
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+
+    const payloads = [first!, second!].map((msg) =>
+      msg.json<StepDispatchMessage>(),
+    );
+    expect(payloads.map((p) => p.stepId).sort()).toEqual(['a', 'b']);
+    for (const payload of payloads) {
+      expect(payload.inputRef).toBe('/tmp/root-output.jpg');
+    }
+    first!.ack();
+    second!.ack();
+  });
 });

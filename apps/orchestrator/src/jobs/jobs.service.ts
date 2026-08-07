@@ -27,7 +27,7 @@ export interface JobWithSteps extends Job {
 }
 
 function isTerminalJobStatus(status: JobStatus): boolean {
-  return status === 'COMPLETE' || status === 'FAILED';
+  return status === 'COMPLETE' || status === 'FAILED' || status === 'PARTIAL';
 }
 
 @Injectable()
@@ -70,6 +70,7 @@ export class JobsService {
                   stepId: step.id,
                   processor: step.processor,
                   params: step.params,
+                  dependsOn: step.dependsOn,
                   order: index,
                   status: 'PENDING' as const,
                 })),
@@ -132,6 +133,7 @@ export class JobsService {
                     stepId: step.id,
                     processor: step.processor,
                     params: step.params,
+                    dependsOn: step.dependsOn,
                     order: index,
                     status: 'PENDING' as const,
                   })),

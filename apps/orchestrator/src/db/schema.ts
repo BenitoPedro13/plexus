@@ -28,14 +28,16 @@ export interface PipelineStepDefinition {
   id: string;
   processor: string;
   params: Record<string, unknown>;
-  dependsOn?: string[];
+  dependsOn: string[];
 }
 
 export const pipelines = pgTable('pipelines', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
-  // Resolved-order step list, already validated by resolveLinearOrder() at
-  // write time — array index is the execution order.
+  // Topologically-ordered step list, already validated and dependsOn-resolved
+  // by resolveDag() at write time (docs/tasks/TASK-branching-parallel-dags.md)
+  // — array index is a display/debug order, not the execution order; a
+  // step's real predecessors are its own dependsOn entries.
   definition: jsonb('definition').$type<PipelineStepDefinition[]>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
@@ -67,6 +69,12 @@ export const jobSteps = pgTable('job_steps', {
   stepId: text('step_id').notNull(),
   processor: text('processor').notNull(),
   params: jsonb('params').$type<Record<string, unknown>>().notNull(),
+  // Step ids (this job's own jobSteps.stepId values, not row ids) this step
+  // depends on — copied from the owning pipeline's definition at job-creation
+  // time, same pattern processor/params already use. Drives
+  // JobDispatchService's ready-step computation; empty means "ready as soon
+  // as the job starts, input is the job's own inputRef."
+  dependsOn: jsonb('depends_on').$type<string[]>().notNull(),
   order: integer('order').notNull(),
   status: jobStepStatusEnum('status').notNull().default('PENDING'),
   startedAt: timestamp('started_at', { withTimezone: true }),

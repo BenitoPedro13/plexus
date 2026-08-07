@@ -101,8 +101,10 @@ export class StepDto {
   @ValidateProcessorParams()
   params!: Record<string, unknown>;
 
-  // Phase 1 pipelines are linear: at most one dependency per step, enforced by
-  // resolveLinearOrder(), not by this DTO's shape alone.
+  // Absent entirely => implicitly depends on the previous array entry (root
+  // if first). Present (including []) => authoritative, opts into a real
+  // DAG. At most one dependency per step (fan-in unsupported). All enforced
+  // by resolveDag(), not by this DTO's shape alone — see dag.validator.ts.
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

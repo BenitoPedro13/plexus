@@ -131,6 +131,73 @@ describe('JobsService.streamEvents (integration, real Postgres + real NATS)', ()
     expect(events.at(-1)).toMatchObject({ scope: 'job', status: 'COMPLETE' });
   }, 15_000);
 
+  async function failStep(
+    jobId: string,
+    jobStepId: string,
+    error: string,
+  ): Promise<void> {
+    await testBroker.natsService.publish(JOB_RESULTS_SUBJECT, {
+      jobId,
+      jobStepId,
+      status: 'failed',
+      error,
+    } satisfies StepResultMessage);
+    const msg = await resultsConsumer.next({ expires: 5_000 });
+    await handleStepResult(
+      testDb.dbService,
+      jobDispatchService,
+      testBroker.natsService,
+      msg!,
+    );
+  }
+
+  it('closes the stream when a fan-out job settles PARTIAL (TASK-branching-parallel-dags.md)', async () => {
+    const pipeline = await pipelinesService.create({
+      name: 'sse-fan-out-partial',
+      steps: [
+        { id: 'root', processor: 'image.resize', params: {} },
+        {
+          id: 'a',
+          processor: 'image.compress',
+          params: {},
+          dependsOn: ['root'],
+        },
+        {
+          id: 'b',
+          processor: 'image.convert',
+          params: { format: 'webp' },
+          dependsOn: ['root'],
+        },
+      ],
+    });
+    const job = await jobsService.create({
+      pipelineId: pipeline.id,
+      inputRef: '/tmp/sse-partial-input.jpg',
+    });
+    const [root, a, b] = job.steps;
+
+    const events: JobProgressEvent[] = [];
+    let completed = false;
+    const subscription = jobsService.streamEvents(job.id).subscribe({
+      next: (message: MessageEvent) =>
+        events.push(message.data as JobProgressEvent),
+      complete: () => {
+        completed = true;
+      },
+    });
+
+    await waitUntil(() => events.length >= 1);
+
+    await completeStep(job.id, root.id, '/tmp/root-output.jpg');
+    await failStep(job.id, a.id, 'boom');
+    await completeStep(job.id, b.id, '/tmp/b-output.jpg');
+
+    await waitUntil(() => completed, 10_000);
+    subscription.unsubscribe();
+
+    expect(events.at(-1)).toMatchObject({ scope: 'job', status: 'PARTIAL' });
+  }, 15_000);
+
   it('completes immediately with just a snapshot for an already-terminal job', async () => {
     const pipeline = await pipelinesService.create({
       name: 'sse-empty-pipeline',

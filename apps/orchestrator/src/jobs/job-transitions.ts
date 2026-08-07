@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { jobs, jobSteps, type Job, type JobStep } from '../db/schema';
 import * as schema from '../db/schema';
@@ -39,6 +39,26 @@ export async function transitionJobStatus(
     .update(jobs)
     .set({ status: to, updatedAt: new Date() })
     .where(eq(jobs.id, id))
+    .returning();
+
+  return updated;
+}
+
+// Atomic PENDING -> RUNNING transition (conditional UPDATE, not
+// SELECT-then-assert): with real parallel branches, sibling steps settling
+// close together routinely trigger concurrent JobDispatchService.dispatchNext()
+// calls for the same job, which could otherwise both observe the same step
+// as ready and double-dispatch it. Returns undefined if another call already
+// claimed the step (WHERE ... AND status = 'PENDING' matched zero rows) —
+// callers treat that as "not mine, skip," not an error.
+export async function tryStartJobStep(
+  db: Database,
+  id: string,
+): Promise<JobStep | undefined> {
+  const [updated] = await db
+    .update(jobSteps)
+    .set({ status: 'RUNNING', startedAt: new Date() })
+    .where(and(eq(jobSteps.id, id), eq(jobSteps.status, 'PENDING')))
     .returning();
 
   return updated;

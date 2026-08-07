@@ -15,6 +15,13 @@
       "when": 1786060504212,
       "tag": "0001_boring_blue_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786129343780,
+      "tag": "0002_sparkling_viper",
+      "breakpoints": true
     }
   ]
 }

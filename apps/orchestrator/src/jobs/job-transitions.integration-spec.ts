@@ -28,7 +28,14 @@ describe('job-transitions (integration, real Postgres)', () => {
       .insert(pipelines)
       .values({
         name: 'noop',
-        definition: [{ id: 'resize', processor: 'image.resize', params: {} }],
+        definition: [
+          {
+            id: 'resize',
+            processor: 'image.resize',
+            params: {},
+            dependsOn: [],
+          },
+        ],
       })
       .returning();
 
@@ -44,6 +51,7 @@ describe('job-transitions (integration, real Postgres)', () => {
         stepId: 'resize',
         processor: 'image.resize',
         params: {},
+        dependsOn: [],
         order: 0,
       })
       .returning();
@@ -65,9 +73,19 @@ describe('job-transitions (integration, real Postgres)', () => {
     const partial = await transitionJobStatus(db, job.id, 'PARTIAL');
     expect(partial.status).toBe('PARTIAL');
 
-    const runningAgain = await transitionJobStatus(db, job.id, 'RUNNING');
-    expect(runningAgain.status).toBe('RUNNING');
+    // PARTIAL is a genuinely terminal settlement
+    // (docs/tasks/TASK-branching-parallel-dags.md) — no legal transition out
+    // of it, including back to RUNNING.
+    await expect(
+      transitionJobStatus(db, job.id, 'RUNNING'),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+  });
 
+  it('accepts RUNNING -> COMPLETE and rejects transitions out of a terminal job', async () => {
+    const { job } = await insertJobWithStep();
+    const db = testDb.dbService.db;
+
+    await transitionJobStatus(db, job.id, 'RUNNING');
     const complete = await transitionJobStatus(db, job.id, 'COMPLETE');
     expect(complete.status).toBe('COMPLETE');
 
@@ -95,6 +113,24 @@ describe('job-transitions (integration, real Postgres)', () => {
     expect(complete.completedAt).not.toBeNull();
     expect(complete.outputRef).toBe('/tmp/out.jpg');
 
+    await expect(
+      transitionJobStepStatus(db, step.id, 'RUNNING'),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
+  });
+
+  it('accepts PENDING -> SKIPPED (cascading skip) and rejects transitions out of it', async () => {
+    const { step } = await insertJobWithStep();
+    const db = testDb.dbService.db;
+
+    const skipped = await transitionJobStepStatus(db, step.id, 'SKIPPED', {
+      error: 'Skipped: ancestor step "resize" failed',
+    });
+    expect(skipped.status).toBe('SKIPPED');
+    expect(skipped.error).toBe('Skipped: ancestor step "resize" failed');
+
+    await expect(
+      transitionJobStepStatus(db, step.id, 'SKIPPED'),
+    ).rejects.toBeInstanceOf(IllegalTransitionError);
     await expect(
       transitionJobStepStatus(db, step.id, 'RUNNING'),
     ).rejects.toBeInstanceOf(IllegalTransitionError);

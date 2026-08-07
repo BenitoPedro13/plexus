@@ -6,8 +6,8 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
+import { DagValidationError } from './dag.validator';
 import { CreatePipelineDto } from './dto/create-pipeline.dto';
-import { LinearDagValidationError } from './linear-dag.validator';
 import { PipelinesService } from './pipelines.service';
 
 @Controller('pipelines')
@@ -19,7 +19,7 @@ export class PipelinesController {
     try {
       return await this.pipelinesService.create(dto);
     } catch (err) {
-      if (err instanceof LinearDagValidationError) {
+      if (err instanceof DagValidationError) {
         throw new BadRequestException({
           reason: err.reason,
           message: err.message,

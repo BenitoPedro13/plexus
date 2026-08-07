@@ -148,6 +148,92 @@ describe('JobResultConsumerService (integration, real Postgres + real NATS)', ()
     expect(failed.steps[0].status).toBe('FAILED');
     expect(failed.steps[0].error).toBe('boom');
   });
+
+  it('a failed branch is cascaded to SKIPPED while an independent branch completes — job settles PARTIAL (TASK-branching-parallel-dags.md)', async () => {
+    const pipeline = await pipelinesService.create({
+      name: 'fan-out-partial-failure',
+      steps: [
+        { id: 'root', processor: 'image.resize', params: {} },
+        {
+          id: 'a',
+          processor: 'image.compress',
+          params: {},
+          dependsOn: ['root'],
+        },
+        {
+          id: 'a-child',
+          processor: 'image.convert',
+          params: { format: 'webp' },
+          dependsOn: ['a'],
+        },
+        {
+          id: 'b',
+          processor: 'image.convert',
+          params: { format: 'avif' },
+          dependsOn: ['root'],
+        },
+      ],
+    });
+    const job = await jobsService.create({
+      pipelineId: pipeline.id,
+      inputRef: '/tmp/partial-input.jpg',
+    });
+    const root = job.steps.find((s) => s.stepId === 'root')!;
+    const a = job.steps.find((s) => s.stepId === 'a')!;
+    const aChild = job.steps.find((s) => s.stepId === 'a-child')!;
+    const b = job.steps.find((s) => s.stepId === 'b')!;
+
+    await testBroker.natsService.publish(JOB_RESULTS_SUBJECT, {
+      jobId: job.id,
+      jobStepId: root.id,
+      status: 'complete',
+      outputRef: '/tmp/root-output.jpg',
+    } satisfies StepResultMessage);
+
+    await waitUntil(async () => {
+      const fetched = await jobsService.findOne(job.id);
+      return (
+        fetched.steps.find((s) => s.id === a.id)?.status === 'RUNNING' &&
+        fetched.steps.find((s) => s.id === b.id)?.status === 'RUNNING'
+      );
+    });
+
+    await testBroker.natsService.publish(JOB_RESULTS_SUBJECT, {
+      jobId: job.id,
+      jobStepId: a.id,
+      status: 'failed',
+      error: 'boom',
+    } satisfies StepResultMessage);
+
+    await waitUntil(async () => {
+      const fetched = await jobsService.findOne(job.id);
+      return (
+        fetched.steps.find((s) => s.id === aChild.id)?.status === 'SKIPPED'
+      );
+    });
+
+    await testBroker.natsService.publish(JOB_RESULTS_SUBJECT, {
+      jobId: job.id,
+      jobStepId: b.id,
+      status: 'complete',
+      outputRef: '/tmp/b-output.jpg',
+    } satisfies StepResultMessage);
+
+    await waitUntil(async () => {
+      const fetched = await jobsService.findOne(job.id);
+      return fetched.status === 'PARTIAL';
+    });
+
+    const settled = await jobsService.findOne(job.id);
+    expect(settled.steps.find((s) => s.id === root.id)?.status).toBe(
+      'COMPLETE',
+    );
+    expect(settled.steps.find((s) => s.id === a.id)?.status).toBe('FAILED');
+    expect(settled.steps.find((s) => s.id === aChild.id)?.status).toBe(
+      'SKIPPED',
+    );
+    expect(settled.steps.find((s) => s.id === b.id)?.status).toBe('COMPLETE');
+  });
 });
 
 // Redelivery / "no lost jobs" — deliberately isolated in its own describe

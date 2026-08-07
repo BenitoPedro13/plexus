@@ -35,7 +35,7 @@ export function isTerminalJobProgressEvent(event: JobProgressEvent): boolean {
       : event.scope === 'job'
         ? event.status
         : undefined;
-  return status === 'COMPLETE' || status === 'FAILED';
+  return status === 'COMPLETE' || status === 'FAILED' || status === 'PARTIAL';
 }
 
 export async function publishJobProgress(
