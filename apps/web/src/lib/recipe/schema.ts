@@ -43,14 +43,19 @@ export const compressParamsSchema = z.object({
 
 export type CompressParams = z.infer<typeof compressParamsSchema>
 
-// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
-// Deferred params (brilliance, highlights, shadows — blocked on V-7) intentionally
+// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table,
+// extended by docs/tasks/TASK-highlights-shadows-tonelut.md (resolved V-7).
+// highlights/shadows are optional/defaulted (0.0 = no-op), unlike the other four,
+// so pre-existing recipes authored before this task don't need updating.
+// Deferred param (brilliance — no libvips primitive identified) intentionally
 // omitted: no schema field without a backing Go processor.
 export const adjustLightParamsSchema = z.object({
   exposure: z.number().min(-3.0).max(3.0),
   brightness: z.number().min(-1.0).max(1.0),
   contrast: z.number().min(-1.0).max(1.0),
   blackPoint: z.number().min(0.0).max(1.0),
+  highlights: z.number().min(-1.0).max(1.0).default(0.0),
+  shadows: z.number().min(-1.0).max(1.0).default(0.0),
 })
 
 export type AdjustLightParams = z.infer<typeof adjustLightParamsSchema>

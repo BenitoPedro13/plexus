@@ -278,8 +278,14 @@ function assertWithinBounds(drift: DriftResult, bounds: DriftBounds): void {
 
 describe('recipe fidelity drift (V-2)', () => {
   const lightPoints = [
-    { name: 'light-mild', params: { exposure: 0.5, brightness: 0.1, contrast: 0.2, blackPoint: 0.05 } },
-    { name: 'light-strong', params: { exposure: -0.5, brightness: -0.2, contrast: 0.3, blackPoint: 0.1 } },
+    {
+      name: 'light-mild',
+      params: { exposure: 0.5, brightness: 0.1, contrast: 0.2, blackPoint: 0.05, highlights: 0, shadows: 0 },
+    },
+    {
+      name: 'light-strong',
+      params: { exposure: -0.5, brightness: -0.2, contrast: 0.3, blackPoint: 0.1, highlights: 0, shadows: 0 },
+    },
   ]
 
   const colorPoints = [

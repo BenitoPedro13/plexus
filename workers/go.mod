@@ -2,6 +2,12 @@ module github.com/benitopedro13/plexus/workers
 
 go 1.26.5
 
+// Local fork of the vips subpackage, patched to add Tonelut/MaplutBand —
+// see docs/tasks/TASK-highlights-shadows-tonelut.md and the resolved V-7
+// entry in docs/90-deferred-register.md. Re-evaluate on any future govips
+// upgrade: drop this replace if upstream ever exports Tonelut itself.
+replace github.com/davidbyttow/govips/v2 => ./internal/govips-fork
+
 require (
 	github.com/davidbyttow/govips/v2 v2.18.0
 	github.com/nats-io/nats.go v1.52.0

@@ -44,7 +44,7 @@ export default function PreviewDemoPage() {
       {
         id: 'preview-adjust-light',
         processor: 'image.adjustLight',
-        params: { exposure, brightness, contrast, blackPoint },
+        params: { exposure, brightness, contrast, blackPoint, highlights: 0, shadows: 0 },
       },
       {
         id: 'preview-adjust-color',

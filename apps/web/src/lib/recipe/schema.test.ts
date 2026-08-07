@@ -54,7 +54,17 @@ describe('recipeSchema', () => {
     }
 
     const parsed = recipeSchema.parse(recipe)
-    expect(parsed).toEqual(recipe)
+    // step-4 (image.adjustLight) omits highlights/shadows on input -- they
+    // default to 0 on parse (TASK-highlights-shadows-tonelut.md), so the
+    // round-trip isn't byte-identical to the input for that one step.
+    expect(parsed).toEqual({
+      ...recipe,
+      steps: recipe.steps.map((step) =>
+        step.id === 'step-4'
+          ? { ...step, params: { ...step.params, highlights: 0, shadows: 0 } }
+          : step,
+      ),
+    })
   })
 
   test('accepts an empty steps array', () => {
@@ -122,7 +132,7 @@ describe('compressParamsSchema', () => {
 })
 
 describe('adjustLightParamsSchema', () => {
-  test('accepts all four P0 params at range boundaries', () => {
+  test('accepts all four required P0 params at range boundaries, defaulting highlights/shadows to 0', () => {
     expect(
       adjustLightParamsSchema.parse({
         exposure: -3.0,
@@ -130,7 +140,14 @@ describe('adjustLightParamsSchema', () => {
         contrast: -1.0,
         blackPoint: 0.0,
       }),
-    ).toEqual({ exposure: -3.0, brightness: -1.0, contrast: -1.0, blackPoint: 0.0 })
+    ).toEqual({
+      exposure: -3.0,
+      brightness: -1.0,
+      contrast: -1.0,
+      blackPoint: 0.0,
+      highlights: 0.0,
+      shadows: 0.0,
+    })
     expect(
       adjustLightParamsSchema.parse({
         exposure: 3.0,
@@ -138,10 +155,17 @@ describe('adjustLightParamsSchema', () => {
         contrast: 1.0,
         blackPoint: 1.0,
       }),
-    ).toEqual({ exposure: 3.0, brightness: 1.0, contrast: 1.0, blackPoint: 1.0 })
+    ).toEqual({
+      exposure: 3.0,
+      brightness: 1.0,
+      contrast: 1.0,
+      blackPoint: 1.0,
+      highlights: 0.0,
+      shadows: 0.0,
+    })
   })
 
-  test('requires all four params', () => {
+  test('requires all four original params', () => {
     expect(() =>
       adjustLightParamsSchema.parse({ exposure: 0, brightness: 0, contrast: 0 }),
     ).toThrow()
@@ -165,6 +189,54 @@ describe('adjustLightParamsSchema', () => {
         brightness: 0,
         contrast: 0,
         blackPoint,
+      }),
+    ).toThrow()
+  })
+
+  test.each([-1.0, 1.0])('accepts highlights at boundary %d', (highlights) => {
+    expect(() =>
+      adjustLightParamsSchema.parse({
+        exposure: 0,
+        brightness: 0,
+        contrast: 0,
+        blackPoint: 0,
+        highlights,
+      }),
+    ).not.toThrow()
+  })
+
+  test.each([-1.1, 1.1])('rejects out-of-range highlights %d', (highlights) => {
+    expect(() =>
+      adjustLightParamsSchema.parse({
+        exposure: 0,
+        brightness: 0,
+        contrast: 0,
+        blackPoint: 0,
+        highlights,
+      }),
+    ).toThrow()
+  })
+
+  test.each([-1.0, 1.0])('accepts shadows at boundary %d', (shadows) => {
+    expect(() =>
+      adjustLightParamsSchema.parse({
+        exposure: 0,
+        brightness: 0,
+        contrast: 0,
+        blackPoint: 0,
+        shadows,
+      }),
+    ).not.toThrow()
+  })
+
+  test.each([-1.1, 1.1])('rejects out-of-range shadows %d', (shadows) => {
+    expect(() =>
+      adjustLightParamsSchema.parse({
+        exposure: 0,
+        brightness: 0,
+        contrast: 0,
+        blackPoint: 0,
+        shadows,
       }),
     ).toThrow()
   })

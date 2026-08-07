@@ -94,6 +94,112 @@ func TestAdjustLight(t *testing.T) {
 		}
 	})
 
+	t.Run("shadows omitted defaults to 0.0 (identity)", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+
+		withDefault := imageAverage(t, adjustLight(t, "step-default", identity))
+		explicitZero := imageAverage(t, adjustLight(t, "step-explicit-zero", map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+			"highlights": float64(0), "shadows": float64(0),
+		}))
+
+		if withDefault != explicitZero {
+			t.Fatalf("expected omitted highlights/shadows to match explicit 0.0, got %v vs %v", withDefault, explicitZero)
+		}
+	})
+
+	t.Run("positive shadows brightens a dark fixture", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+		dark := writeUniformJPEG(t, t.TempDir(), 60, 60, 60)
+
+		base, err := processors.AdjustLight(context.Background(), "step-base", dark, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight base: %v", err)
+		}
+		lifted, err := processors.AdjustLight(context.Background(), "step-lifted", dark, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+			"shadows": float64(1.0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight shadows=1.0: %v", err)
+		}
+
+		if avgBase, avgLifted := imageAverage(t, base), imageAverage(t, lifted); avgLifted <= avgBase {
+			t.Fatalf("expected shadows=1.0 to brighten a dark fixture, got base=%v lifted=%v", avgBase, avgLifted)
+		}
+	})
+
+	t.Run("negative shadows darkens a dark fixture", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+		dark := writeUniformJPEG(t, t.TempDir(), 60, 60, 60)
+
+		base, err := processors.AdjustLight(context.Background(), "step-base", dark, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight base: %v", err)
+		}
+		crushed, err := processors.AdjustLight(context.Background(), "step-crushed", dark, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+			"shadows": float64(-1.0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight shadows=-1.0: %v", err)
+		}
+
+		if avgBase, avgCrushed := imageAverage(t, base), imageAverage(t, crushed); avgCrushed >= avgBase {
+			t.Fatalf("expected shadows=-1.0 to darken a dark fixture, got base=%v crushed=%v", avgBase, avgCrushed)
+		}
+	})
+
+	t.Run("positive highlights recovers (darkens) a light fixture", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+		light := writeUniformJPEG(t, t.TempDir(), 200, 200, 200)
+
+		base, err := processors.AdjustLight(context.Background(), "step-base", light, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight base: %v", err)
+		}
+		recovered, err := processors.AdjustLight(context.Background(), "step-recovered", light, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+			"highlights": float64(1.0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight highlights=1.0: %v", err)
+		}
+
+		if avgBase, avgRecovered := imageAverage(t, base), imageAverage(t, recovered); avgRecovered >= avgBase {
+			t.Fatalf("expected highlights=1.0 to darken/recover a light fixture, got base=%v recovered=%v", avgBase, avgRecovered)
+		}
+	})
+
+	t.Run("negative highlights brightens a light fixture", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+		light := writeUniformJPEG(t, t.TempDir(), 200, 200, 200)
+
+		base, err := processors.AdjustLight(context.Background(), "step-base", light, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight base: %v", err)
+		}
+		blown, err := processors.AdjustLight(context.Background(), "step-blown", light, map[string]interface{}{
+			"exposure": float64(0), "brightness": float64(0), "contrast": float64(0), "blackPoint": float64(0),
+			"highlights": float64(-1.0),
+		})
+		if err != nil {
+			t.Fatalf("AdjustLight highlights=-1.0: %v", err)
+		}
+
+		if avgBase, avgBlown := imageAverage(t, base), imageAverage(t, blown); avgBlown <= avgBase {
+			t.Fatalf("expected highlights=-1.0 to brighten a light fixture, got base=%v blown=%v", avgBase, avgBlown)
+		}
+	})
+
 	t.Run("blackPoint=1.0 clips fully black without erroring or NaN output", func(t *testing.T) {
 		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
 
@@ -134,6 +240,10 @@ func TestAdjustLight(t *testing.T) {
 		{"contrast", -1.1},
 		{"blackPoint", -0.1},
 		{"blackPoint", 1.1},
+		{"highlights", 1.1},
+		{"highlights", -1.1},
+		{"shadows", 1.1},
+		{"shadows", -1.1},
 	} {
 		tc := tc
 		t.Run(tc.key+" out of range is a validation error", func(t *testing.T) {

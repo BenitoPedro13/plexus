@@ -12,6 +12,8 @@ describe('applyLightBlend', () => {
       brightness: 0.3,
       contrast: 0.25,
       blackPoint: 0,
+      highlights: 0,
+      shadows: 0,
     })
   })
 
@@ -21,6 +23,8 @@ describe('applyLightBlend', () => {
       brightness: -0.3,
       contrast: -0.25,
       blackPoint: 0.3,
+      highlights: 0,
+      shadows: 0,
     })
   })
 

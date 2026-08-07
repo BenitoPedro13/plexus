@@ -15,7 +15,7 @@ const RED: RGBA = { r: 0.8, g: 0.2, b: 0.2, a: 1 }
 
 describe('applyAdjustLight', () => {
   it('identity params leave a pixel unchanged', () => {
-    const result = applyAdjustLight(GRAY, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0 })
+    const result = applyAdjustLight(GRAY, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0 })
     expect(result.r).toBeCloseTo(0.5)
     expect(result.g).toBeCloseTo(0.5)
     expect(result.b).toBeCloseTo(0.5)
@@ -23,19 +23,19 @@ describe('applyAdjustLight', () => {
   })
 
   it('positive exposure strictly brightens', () => {
-    const result = applyAdjustLight(GRAY, { exposure: 1, brightness: 0, contrast: 0, blackPoint: 0 })
+    const result = applyAdjustLight(GRAY, { exposure: 1, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0 })
     expect(result.r).toBeGreaterThan(GRAY.r)
   })
 
   it('blackPoint=1.0 clips to black without NaN/Infinity (mirrors the Go divide-by-zero guard)', () => {
-    const result = applyAdjustLight(GRAY, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 1.0 })
+    const result = applyAdjustLight(GRAY, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 1.0, highlights: 0, shadows: 0 })
     expect(Number.isFinite(result.r)).toBe(true)
     expect(result.r).toBe(0)
   })
 
   it('leaves alpha untouched regardless of params (D-20: unlike Go, which mutates all bands)', () => {
     const translucent: RGBA = { r: 0.5, g: 0.5, b: 0.5, a: 0.3 }
-    const result = applyAdjustLight(translucent, { exposure: 2, brightness: -0.5, contrast: 0.8, blackPoint: 0.5 })
+    const result = applyAdjustLight(translucent, { exposure: 2, brightness: -0.5, contrast: 0.8, blackPoint: 0.5, highlights: 0, shadows: 0 })
     expect(result.a).toBe(0.3)
   })
 })
@@ -163,7 +163,7 @@ describe('collectOrderedAdjustmentSteps', () => {
       steps: [
         { id: '1', processor: 'image.sharpen', params: { intensity: 0.5 } },
         { id: '2', processor: 'image.resize', params: { width: 100, height: 100, fit: 'inside' } },
-        { id: '3', processor: 'image.adjustLight', params: { exposure: 1, brightness: 0, contrast: 0, blackPoint: 0 } },
+        { id: '3', processor: 'image.adjustLight', params: { exposure: 1, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0 } },
         { id: '4', processor: 'image.sharpen', params: { intensity: 0.2 } },
       ],
     }

@@ -1,7 +1,11 @@
 package processors_test
 
 import (
+	"image"
+	"image/color"
+	"image/jpeg"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/davidbyttow/govips/v2/vips"
@@ -62,4 +66,31 @@ func channelSpread(t *testing.T, path string, x, y int) float64 {
 		}
 	}
 	return max - min
+}
+
+// writeUniformJPEG creates a small solid-color JPEG fixture in dir and
+// returns its path. testdata/images/gradient.jpg's L* range (~54-62, per
+// TASK-highlights-shadows-tonelut.md's investigation) never dips below
+// libvips tonelut's default mid-point (Lm=50), so it can't exercise the
+// "shadows" bump (shad(x) is 0 for x>=Lm) — a synthetic uniform fixture at
+// a chosen brightness is needed instead to land solidly in shadow or
+// highlight territory.
+func writeUniformJPEG(t *testing.T, dir string, r, g, b uint8) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+		}
+	}
+	path := filepath.Join(dir, "uniform.jpg")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create %q: %v", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	if err := jpeg.Encode(f, img, &jpeg.Options{Quality: 95}); err != nil {
+		t.Fatalf("encode %q: %v", path, err)
+	}
+	return path
 }

@@ -9,6 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 
 COPY go.mod go.sum ./
+# internal/govips-fork is a local replace target (go.mod's `replace
+# github.com/davidbyttow/govips/v2 => ./internal/govips-fork` — see
+# docs/tasks/TASK-highlights-shadows-tonelut.md), so it must exist on disk
+# before `go mod download` resolves it, unlike a normal registry dependency.
+COPY internal/govips-fork ./internal/govips-fork
 RUN go mod download
 
 COPY . .

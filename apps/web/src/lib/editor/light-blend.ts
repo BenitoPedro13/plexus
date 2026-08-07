@@ -5,6 +5,11 @@ import type { AdjustLightParams } from '@/lib/recipe/schema'
 // (closed-source, unverifiable) -- this is the UI-only judgment call
 // docs/tasks/TASK-composite-slider-mapping.md explicitly deferred to this
 // task. See docs/tasks/TASK-editor-composite-ui.md for the reasoning.
+// highlights/shadows are left at 0 (no-op) here -- the Light master slider's
+// blend ratios only cover the original four P0 params; wiring highlights/
+// shadows into this blend (and into a live preview) is out of scope for
+// TASK-highlights-shadows-tonelut.md, tracked as its own follow-on D-xx in
+// docs/90-deferred-register.md.
 export function applyLightBlend(t: number): AdjustLightParams {
   const clamped = Math.max(-1, Math.min(1, t))
   return {
@@ -12,6 +17,8 @@ export function applyLightBlend(t: number): AdjustLightParams {
     brightness: clamped * 0.3,
     contrast: clamped * 0.25,
     blackPoint: clamped < 0 ? -clamped * 0.3 : 0,
+    highlights: 0,
+    shadows: 0,
   }
 }
 
@@ -20,4 +27,6 @@ export const identityLightParams: AdjustLightParams = {
   brightness: 0,
   contrast: 0,
   blackPoint: 0,
+  highlights: 0,
+  shadows: 0,
 }

@@ -54,6 +54,15 @@ func requireFloatParamInRange(params map[string]interface{}, key string, min, ma
 	return f, nil
 }
 
+// optionalFloatParamInRange reads an optional float64 param within [min,
+// max], returning def if the param is absent.
+func optionalFloatParamInRange(params map[string]interface{}, key string, def, min, max float64) (float64, error) {
+	if _, ok := params[key]; !ok {
+		return def, nil
+	}
+	return requireFloatParamInRange(params, key, min, max)
+}
+
 // requireStringParam reads a required, non-empty string param.
 func requireStringParam(params map[string]interface{}, key string) (string, error) {
 	raw, ok := params[key]
