@@ -96,10 +96,31 @@ workflow guide.
 git clone https://github.com/BenitoPedro13/plexus.git
 cd plexus
 cp .env.example .env          # Postgres/NATS/MinIO connection info
+cd apps/web && cp .env.example .env.local && cd ../..
 pnpm install
 
+pnpm dev
+```
+
+`pnpm dev` is the one command that brings up the whole stack: local infra (Postgres, NATS
+JetStream, MinIO — waits for all three to report healthy), the orchestrator at
+`http://localhost:3000`, the Go worker, and the editor/frontend at
+`http://localhost:3001` (bumped from Next's default 3000 to avoid colliding with the
+orchestrator). It loads the repo-root `.env` and exports it to every process it starts —
+see `scripts/dev.sh`.
+
+<details>
+<summary>Running pieces individually</summary>
+
+Useful when debugging one process in isolation. Each of these needs the repo-root `.env`
+exported into its own shell first (`main.ts`/`main.go` don't load it automatically —
+`docs/90-deferred-register.md` `D-43`):
+
+```sh
+set -a && source .env && set +a
+
 # Local infra: Postgres, NATS JetStream, MinIO
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml up --wait
 
 # Orchestrator (NestJS) — http://localhost:3000
 pnpm --filter orchestrator start:dev
@@ -107,10 +128,11 @@ pnpm --filter orchestrator start:dev
 # Go worker
 cd workers && go run ./cmd/worker
 
-# Editor / frontend — http://localhost:3000 (Next.js dev server; adjust the
-# orchestrator's PORT if both would collide)
-cd apps/web && cp .env.example .env.local && pnpm dev
+# Editor / frontend — pick a port that doesn't collide with the orchestrator's 3000
+cd apps/web && pnpm dev -- -p 3001
 ```
+
+</details>
 
 Each app has its own README with endpoints, env vars, and test instructions:
 [`apps/orchestrator/README.md`](apps/orchestrator/README.md),

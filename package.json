@@ -4,5 +4,12 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.5.2"
+  "packageManager": "pnpm@11.5.2",
+  "scripts": {
+    "dev": "dotenv -e .env -- bash scripts/dev.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.4",
+    "dotenv-cli": "^11.0.0"
+  }
 }
