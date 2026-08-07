@@ -15,6 +15,23 @@ import (
 	"github.com/benitopedro13/plexus/workers/internal/storage"
 )
 
+// heartbeatInterval is how often Handle tells JetStream a message is still
+// being worked on, via msg.InProgress(). Must stay comfortably under the
+// worker-dispatch consumer's AckWait (cmd/worker/main.go) so a missed tick
+// or two never risks a false redelivery. A var, not a const, so
+// SetHeartbeatIntervalForTest can shorten it for tests that need to cross a
+// short AckWait window without waiting on production-length timers.
+var heartbeatInterval = 10 * time.Second
+
+// SetHeartbeatIntervalForTest overrides heartbeatInterval for the life of a
+// test; the returned restore func puts the production value back. Not for
+// production use.
+func SetHeartbeatIntervalForTest(d time.Duration) (restore func()) {
+	prev := heartbeatInterval
+	heartbeatInterval = d
+	return func() { heartbeatInterval = prev }
+}
+
 // Handle dispatches a StepDispatchMessage to the registered built-in
 // processor (workers/internal/processors) and publishes the result. An
 // unparsable message is Term()'d — it's malformed, not a valid job the
@@ -43,7 +60,11 @@ func Handle(ctx context.Context, js jetstream.JetStream, store *storage.Client, 
 		JobStepID: in.JobStepID,
 	}
 
-	if outputRef, err := runStep(ctx, store, in); err != nil {
+	stopHeartbeat := startHeartbeat(msg, in.JobStepID)
+	outputRef, err := runStep(ctx, store, in)
+	stopHeartbeat()
+
+	if err != nil {
 		out.Status = StepResultFailed
 		out.Error = err.Error()
 	} else {
@@ -68,6 +89,33 @@ func Handle(ctx context.Context, js jetstream.JetStream, store *storage.Client, 
 	}
 
 	return nil
+}
+
+// startHeartbeat periodically calls msg.InProgress() until the returned stop
+// function is called, so JetStream's AckWait deadline never elapses while a
+// processor is still legitimately running (ffmpeg/libvips operations can
+// take minutes — see docs/tasks/TASK-worker-ack-heartbeat.md). Without this,
+// a step that outlives AckWait gets redelivered and reprocessed concurrently
+// with the still-running original, wasting CPU on duplicate work rather than
+// producing a lost job. A missed InProgress() call is logged, not fatal —
+// the next tick self-heals it.
+func startHeartbeat(msg jetstream.Msg, jobStepID string) (stop func()) {
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(heartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := msg.InProgress(); err != nil {
+					log.Printf("heartbeat for step %s: %v", jobStepID, err)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	return func() { close(done) }
 }
 
 // runStep downloads in.InputRef (an object-storage key) to a local temp

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,6 +51,16 @@ type testBroker struct {
 }
 
 func newTestBroker(t *testing.T, ctx context.Context) *testBroker {
+	t.Helper()
+	return newTestBrokerWithAckWait(t, ctx, 0)
+}
+
+// newTestBrokerWithAckWait is newTestBroker with the dispatch consumer's
+// AckWait overridable -- zero leaves JetStream's own default (30s, matching
+// production's un-overridden value pre-TASK-worker-ack-heartbeat.md), a
+// short non-zero value lets a test cross the AckWait boundary quickly rather
+// than waiting on a production-length window.
+func newTestBrokerWithAckWait(t *testing.T, ctx context.Context, dispatchAckWait time.Duration) *testBroker {
 	t.Helper()
 
 	ctr, err := natscontainer.Run(ctx, "nats:2.14.4-alpine")
@@ -105,6 +116,7 @@ func newTestBroker(t *testing.T, ctx context.Context) *testBroker {
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		DeliverPolicy: jetstream.DeliverAllPolicy,
 		FilterSubject: dispatch.DispatchSubject,
+		AckWait:       dispatchAckWait,
 	})
 	if err != nil {
 		t.Fatalf("create dispatch consumer: %v", err)
@@ -408,5 +420,87 @@ func TestHandle_DownloadFailure(t *testing.T) {
 	}
 	if out.Error == "" {
 		t.Fatal("expected a non-empty error message")
+	}
+}
+
+// TestHandle_NoDuplicateDeliveryDuringLongStep proves the InProgress()
+// heartbeat (docs/tasks/TASK-worker-ack-heartbeat.md) actually prevents
+// redelivery of a step still legitimately running when AckWait elapses,
+// rather than relying on the step happening to finish first. Uses a
+// deliberately short AckWait and heartbeat interval (both well under a
+// second) so the test runs fast while still exercising the real mechanism
+// end to end against a real NATS broker -- no mocking the queue, per
+// CLAUDE.md.
+//
+// Consume() (not the manual Next()+Handle() of publishAndHandle) is used
+// deliberately: it's the same API cmd/worker/main.go uses in production, and
+// it's what actually redelivers an unacked/un-heartbeated message to the
+// callback again while the first call is still running -- a manual
+// single-shot Next() call has no such background redelivery behavior to
+// observe.
+func TestHandle_NoDuplicateDeliveryDuringLongStep(t *testing.T) {
+	restoreInterval := dispatch.SetHeartbeatIntervalForTest(50 * time.Millisecond)
+	defer restoreInterval()
+
+	var calls int32
+	const slowProcessor = "test.slow"
+	restoreProcessor := processors.RegisterForTest(slowProcessor, processors.SlowNoopForTest(400*time.Millisecond, &calls))
+	defer restoreProcessor()
+
+	ctx := context.Background()
+	// AckWait (150ms) sits between the heartbeat interval (50ms, several
+	// ticks fit inside it) and the processor's duration (400ms, so the
+	// window would elapse at least once mid-run without the heartbeat).
+	b := newTestBrokerWithAckWait(t, ctx, 150*time.Millisecond)
+	inputKey := seedInput(t, ctx, b.store, fixtureJPEG, "uploads/gradient.jpg")
+
+	in := dispatch.StepDispatchMessage{
+		JobID:     "job-heartbeat",
+		JobStepID: "step-heartbeat",
+		StepID:    "slow",
+		Processor: slowProcessor,
+		Params:    map[string]interface{}{},
+		InputRef:  inputKey,
+		Order:     0,
+	}
+	payload, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal dispatch message: %v", err)
+	}
+	if _, err := b.js.Publish(ctx, dispatch.DispatchSubject, payload); err != nil {
+		t.Fatalf("publish dispatch message: %v", err)
+	}
+
+	handled := make(chan error, 1)
+	consumeCtx, err := b.dispatchConsumer.Consume(func(msg jetstream.Msg) {
+		err := dispatch.Handle(ctx, b.js, b.store, msg)
+		select {
+		case handled <- err:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatalf("start consuming: %v", err)
+	}
+	defer consumeCtx.Stop()
+
+	select {
+	case err := <-handled:
+		if err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Handle to complete")
+	}
+
+	// Give any would-be redelivery a chance to arrive and re-trigger the
+	// callback before asserting the final call count.
+	time.Sleep(500 * time.Millisecond)
+
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf(
+			"expected the processor to run exactly once despite AckWait (150ms) elapsing mid-run (400ms); got %d calls -- InProgress() heartbeat isn't preventing redelivery",
+			got,
+		)
 	}
 }

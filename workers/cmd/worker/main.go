@@ -64,6 +64,13 @@ func main() {
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		DeliverPolicy: jetstream.DeliverAllPolicy,
 		FilterSubject: dispatch.DispatchSubject,
+		// Defense-in-depth alongside dispatch.Handle's InProgress() heartbeat
+		// (docs/tasks/TASK-worker-ack-heartbeat.md): a longer base window
+		// means a brief heartbeat hiccup doesn't immediately look like a dead
+		// worker. MaxDeliver stays unlimited (default) deliberately -- a
+		// worker that actually crashes mid-job must still have its job
+		// picked up by another replica (spec's "no lost jobs" guarantee).
+		AckWait: 2 * time.Minute,
 	})
 	cancel()
 	if err != nil {
