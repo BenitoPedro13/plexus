@@ -1,21 +1,37 @@
 import { NotFoundException } from '@nestjs/common';
+import {
+  setupTestBroker,
+  type TestBroker,
+} from '../../test/support/nats-test-broker';
 import { setupTestDb, type TestDb } from '../../test/support/postgres-test-db';
-import { IllegalTransitionError } from './job-status';
-import { JobsService } from './jobs.service';
 import { PipelinesService } from '../pipelines/pipelines.service';
+import { JobDispatchService } from './job-dispatch.service';
+import { JobsService } from './jobs.service';
 
-describe('JobsService (integration, real Postgres)', () => {
+// create()'s dispatch side effect (see job-dispatch.service.ts) means
+// JobsService now depends on NATS transitively, so this suite runs against
+// both real Postgres and real NATS — no mocking either, per CLAUDE.md.
+// The state-machine transition matrix itself is covered NATS-free in
+// job-transitions.integration-spec.ts.
+describe('JobsService (integration, real Postgres + real NATS)', () => {
   let testDb: TestDb;
+  let testBroker: TestBroker;
   let jobsService: JobsService;
   let pipelinesService: PipelinesService;
 
   beforeAll(async () => {
     testDb = await setupTestDb();
-    jobsService = new JobsService(testDb.dbService);
+    testBroker = await setupTestBroker();
+    const jobDispatchService = new JobDispatchService(
+      testDb.dbService,
+      testBroker.natsService,
+    );
+    jobsService = new JobsService(testDb.dbService, jobDispatchService);
     pipelinesService = new PipelinesService(testDb.dbService);
   }, 120_000);
 
   afterAll(async () => {
+    await testBroker.teardown();
     await testDb.teardown();
   });
 
@@ -34,7 +50,7 @@ describe('JobsService (integration, real Postgres)', () => {
     });
   }
 
-  it('materializes one PENDING step per pipeline step, in order, and the job starts QUEUED', async () => {
+  it('materializes one step per pipeline step and immediately dispatches the first', async () => {
     const pipeline = await createTwoStepPipeline();
 
     const job = await jobsService.create({
@@ -42,10 +58,13 @@ describe('JobsService (integration, real Postgres)', () => {
       inputRef: '/tmp/input.jpg',
     });
 
-    expect(job.status).toBe('QUEUED');
+    // create() dispatches the first step synchronously (see
+    // JobDispatchService), so by the time it returns the job is already
+    // RUNNING with its first step RUNNING, not QUEUED/PENDING.
+    expect(job.status).toBe('RUNNING');
     expect(job.steps).toHaveLength(2);
     expect(job.steps.map((s) => [s.stepId, s.order, s.status])).toEqual([
-      ['resize', 0, 'PENDING'],
+      ['resize', 0, 'RUNNING'],
       ['compress', 1, 'PENDING'],
     ]);
 
@@ -62,61 +81,22 @@ describe('JobsService (integration, real Postgres)', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('accepts every legal job transition and rejects illegal ones', async () => {
+  it('transitionJob/transitionStep delegate to the shared transition rules', async () => {
     const pipeline = await createTwoStepPipeline();
     const job = await jobsService.create({
       pipelineId: pipeline.id,
-      inputRef: '/tmp/a.jpg',
-    });
-
-    // QUEUED -> COMPLETE directly is illegal.
-    await expect(
-      jobsService.transitionJob(job.id, 'COMPLETE'),
-    ).rejects.toBeInstanceOf(IllegalTransitionError);
-
-    const running = await jobsService.transitionJob(job.id, 'RUNNING');
-    expect(running.status).toBe('RUNNING');
-
-    const partial = await jobsService.transitionJob(job.id, 'PARTIAL');
-    expect(partial.status).toBe('PARTIAL');
-
-    const runningAgain = await jobsService.transitionJob(job.id, 'RUNNING');
-    expect(runningAgain.status).toBe('RUNNING');
-
-    const complete = await jobsService.transitionJob(job.id, 'COMPLETE');
-    expect(complete.status).toBe('COMPLETE');
-
-    // COMPLETE is terminal.
-    await expect(
-      jobsService.transitionJob(job.id, 'RUNNING'),
-    ).rejects.toBeInstanceOf(IllegalTransitionError);
-  });
-
-  it('accepts every legal job-step transition and rejects illegal ones, stamping timestamps', async () => {
-    const pipeline = await createTwoStepPipeline();
-    const job = await jobsService.create({
-      pipelineId: pipeline.id,
-      inputRef: '/tmp/b.jpg',
+      inputRef: '/tmp/c.jpg',
     });
     const [firstStep] = job.steps;
 
-    // PENDING -> COMPLETE directly is illegal.
-    await expect(
-      jobsService.transitionStep(firstStep.id, 'COMPLETE'),
-    ).rejects.toBeInstanceOf(IllegalTransitionError);
+    const completedStep = await jobsService.transitionStep(
+      firstStep.id,
+      'COMPLETE',
+    );
+    expect(completedStep.status).toBe('COMPLETE');
 
-    const running = await jobsService.transitionStep(firstStep.id, 'RUNNING');
-    expect(running.status).toBe('RUNNING');
-    expect(running.startedAt).not.toBeNull();
-
-    const complete = await jobsService.transitionStep(running.id, 'COMPLETE');
-    expect(complete.status).toBe('COMPLETE');
-    expect(complete.completedAt).not.toBeNull();
-
-    // COMPLETE is terminal.
-    await expect(
-      jobsService.transitionStep(firstStep.id, 'RUNNING'),
-    ).rejects.toBeInstanceOf(IllegalTransitionError);
+    const partialJob = await jobsService.transitionJob(job.id, 'PARTIAL');
+    expect(partialJob.status).toBe('PARTIAL');
   });
 
   it('throws NotFoundException transitioning an unknown job or step', async () => {

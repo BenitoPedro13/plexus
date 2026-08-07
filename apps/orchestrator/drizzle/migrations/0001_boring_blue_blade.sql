@@ -1,0 +1,1 @@
+ALTER TABLE "job_steps" ADD COLUMN "output_ref" text;

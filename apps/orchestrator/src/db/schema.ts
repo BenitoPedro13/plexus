@@ -71,6 +71,9 @@ export const jobSteps = pgTable('job_steps', {
   status: jobStepStatusEnum('status').notNull().default('PENDING'),
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
+  // Where this step's output landed once COMPLETE. The next step's
+  // dispatch inputRef is chained from this (see JobDispatchService).
+  outputRef: text('output_ref'),
   error: text('error'),
 });
 

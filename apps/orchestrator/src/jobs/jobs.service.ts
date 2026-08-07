@@ -9,12 +9,12 @@ import {
   type JobStep,
 } from '../db/schema';
 import { CreateJobDto } from './dto/create-job.dto';
+import { JobDispatchService } from './job-dispatch.service';
+import type { JobStatus, JobStepStatus } from './job-status';
 import {
-  assertJobStepTransition,
-  assertJobTransition,
-  type JobStatus,
-  type JobStepStatus,
-} from './job-status';
+  transitionJobStatus,
+  transitionJobStepStatus,
+} from './job-transitions';
 
 export interface JobWithSteps extends Job {
   steps: JobStep[];
@@ -22,7 +22,10 @@ export interface JobWithSteps extends Job {
 
 @Injectable()
 export class JobsService {
-  constructor(private readonly dbService: DbService) {}
+  constructor(
+    private readonly dbService: DbService,
+    private readonly jobDispatchService: JobDispatchService,
+  ) {}
 
   async create(dto: CreateJobDto): Promise<JobWithSteps> {
     const [pipeline] = await this.dbService.db
@@ -34,7 +37,7 @@ export class JobsService {
       throw new NotFoundException(`Pipeline "${dto.pipelineId}" not found`);
     }
 
-    return this.dbService.db.transaction(async (tx) => {
+    const created = await this.dbService.db.transaction(async (tx) => {
       const [job] = await tx
         .insert(jobs)
         .values({
@@ -63,6 +66,14 @@ export class JobsService {
 
       return { ...job, steps: steps.sort((a, b) => a.order - b.order) };
     });
+
+    // Dispatch happens after the transaction commits: a NATS publish can't
+    // be rolled back if the surrounding transaction later aborts. It
+    // mutates job/step status, so re-fetch rather than returning the
+    // pre-dispatch snapshot captured above.
+    await this.jobDispatchService.dispatchNext(created.id);
+
+    return this.findOne(created.id);
   }
 
   async findOne(id: string): Promise<JobWithSteps> {
@@ -85,48 +96,10 @@ export class JobsService {
   }
 
   async transitionJob(id: string, to: JobStatus): Promise<Job> {
-    const [current] = await this.dbService.db
-      .select()
-      .from(jobs)
-      .where(eq(jobs.id, id));
-    if (!current) {
-      throw new NotFoundException(`Job "${id}" not found`);
-    }
-
-    assertJobTransition(current.status, to);
-
-    const [updated] = await this.dbService.db
-      .update(jobs)
-      .set({ status: to, updatedAt: new Date() })
-      .where(eq(jobs.id, id))
-      .returning();
-
-    return updated;
+    return transitionJobStatus(this.dbService.db, id, to);
   }
 
   async transitionStep(id: string, to: JobStepStatus): Promise<JobStep> {
-    const [current] = await this.dbService.db
-      .select()
-      .from(jobSteps)
-      .where(eq(jobSteps.id, id));
-    if (!current) {
-      throw new NotFoundException(`Job step "${id}" not found`);
-    }
-
-    assertJobStepTransition(current.status, to);
-
-    const now = new Date();
-    const [updated] = await this.dbService.db
-      .update(jobSteps)
-      .set({
-        status: to,
-        startedAt: to === 'RUNNING' ? now : current.startedAt,
-        completedAt:
-          to === 'COMPLETE' || to === 'FAILED' ? now : current.completedAt,
-      })
-      .where(eq(jobSteps.id, id))
-      .returning();
-
-    return updated;
+    return transitionJobStepStatus(this.dbService.db, id, to);
   }
 }

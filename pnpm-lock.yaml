@@ -10,6 +10,15 @@ importers:
 
   apps/orchestrator:
     dependencies:
+      '@nats-io/jetstream':
+        specifier: ^3.4.0
+        version: 3.4.0
+      '@nats-io/nats-core':
+        specifier: ^3.4.0
+        version: 3.4.0
+      '@nats-io/transport-node':
+        specifier: ^3.4.0
+        version: 3.4.0
       '@nestjs/common':
         specifier: ^11.0.1
         version: 11.1.28(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -53,6 +62,9 @@ importers:
       '@nestjs/testing':
         specifier: ^11.0.1
         version: 11.1.28(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@nestjs/platform-express@11.1.28)
+      '@testcontainers/nats':
+        specifier: ^12.1.0
+        version: 12.1.0
       '@testcontainers/postgresql':
         specifier: ^12.1.0
         version: 12.1.0
@@ -1144,6 +1156,24 @@ packages:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.3
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.3
 
+  '@nats-io/jetstream@3.4.0':
+    resolution: {integrity: sha512-GzHQodNJ942+R5LRb8PuZ5ugVWVWMRiufxUYLLVWkXKfwDXYN+Owo0d7L/b9O7BPyrbYD7jQWAC6+ZVuXa9Gyw==}
+
+  '@nats-io/nats-core@3.4.0':
+    resolution: {integrity: sha512-QMDM86EUNm+wudlKC67HLar/KHHQUvJGLfb4jbahje3pUk3K9afeck9fwsxBZF0eUFox6T/TA6m/t+lQqf+QsQ==}
+
+  '@nats-io/nkeys@2.0.3':
+    resolution: {integrity: sha512-JVt56GuE6Z89KUkI4TXUbSI9fmIfAmk6PMPknijmuL72GcD+UgIomTcRWiNvvJKxA01sBbmIPStqJs5cMRBC3A==}
+    engines: {node: '>=18.0.0'}
+
+  '@nats-io/nuid@3.0.0':
+    resolution: {integrity: sha512-QbXZDrxmYlrn5AD06gYcUTmEHwxn96HBQMIk7XTjDlEcx6FPzVBBPjp4AMRh1lEv6B4iJ6Xb/Uz61JugPXFRQg==}
+    engines: {node: '>= 22.x'}
+
+  '@nats-io/transport-node@3.4.0':
+    resolution: {integrity: sha512-hH7u7ejIBTFEJIZ8rIcMrHJI6wl+HhpO5sVFs1+ppmXa8RuB2+Lh1+UwTzZ5xTNNm1TKcRkYy+2qCV56qp8RxA==}
+    engines: {node: '>= 18.0.0'}
+
   '@nestjs/cli@11.0.24':
     resolution: {integrity: sha512-aIHxQLSYtXShifA3zwWIeznEsZnNa3Iz2QRykFj+sl9IcbERBHr5nH87FRgywM+He3NxoF5WazHfR8FsmVeWxw==}
     engines: {node: '>= 20.11'}
@@ -1266,6 +1296,9 @@ packages:
 
   '@sinonjs/fake-timers@15.4.0':
     resolution: {integrity: sha512-DsG+8/LscQIQg68J6Ef3dv10u6nVyetYn923s3/sus5eaGfTo1of5WMZSLf0UJc9KDuKPilPH0UDJCjvNbDNCA==}
+
+  '@testcontainers/nats@12.1.0':
+    resolution: {integrity: sha512-aFl8uPPEh2c8V2XMHd27rpKj4ndGDWf0CR8VEUXSh+ZMxNKxMc0yiDByI5SkhI6XqRdy0P37PRyvbxbyVeKAkA==}
 
   '@testcontainers/postgresql@12.1.0':
     resolution: {integrity: sha512-Pjf2VSVNirEPfz36nidyrVAnZvc2YhajOznY4VgyEsvfTd5qiMNOuPq96drREvxAUtXl5SFLX7vXj7sSq4aTcA==}
@@ -3815,6 +3848,9 @@ packages:
   tweetnacl@0.14.5:
     resolution: {integrity: sha512-KXXFFdAbFXY4geFIwoyNK+f5Z1b7swfXABfL7HXCmoIWMKU3dmS26672A4EeQtDzLKy7SXmfBu51JolvEKwtGA==}
 
+  tweetnacl@1.0.3:
+    resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
+
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
@@ -4984,6 +5020,27 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
+  '@nats-io/jetstream@3.4.0':
+    dependencies:
+      '@nats-io/nats-core': 3.4.0
+
+  '@nats-io/nats-core@3.4.0':
+    dependencies:
+      '@nats-io/nkeys': 2.0.3
+      '@nats-io/nuid': 3.0.0
+
+  '@nats-io/nkeys@2.0.3':
+    dependencies:
+      tweetnacl: 1.0.3
+
+  '@nats-io/nuid@3.0.0': {}
+
+  '@nats-io/transport-node@3.4.0':
+    dependencies:
+      '@nats-io/nats-core': 3.4.0
+      '@nats-io/nkeys': 2.0.3
+      '@nats-io/nuid': 3.0.0
+
   '@nestjs/cli@11.0.24(@types/node@24.13.3)(prettier@3.9.6)':
     dependencies:
       '@angular-devkit/core': 19.2.27(chokidar@4.0.3)
@@ -5121,6 +5178,15 @@ snapshots:
   '@sinonjs/fake-timers@15.4.0':
     dependencies:
       '@sinonjs/commons': 3.0.1
+
+  '@testcontainers/nats@12.1.0':
+    dependencies:
+      testcontainers: 12.1.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+      - supports-color
 
   '@testcontainers/postgresql@12.1.0':
     dependencies:
@@ -7914,6 +7980,8 @@ snapshots:
       fsevents: 2.3.3
 
   tweetnacl@0.14.5: {}
+
+  tweetnacl@1.0.3: {}
 
   type-check@0.4.0:
     dependencies:
