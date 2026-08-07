@@ -55,7 +55,7 @@ export default function PreviewDemoPage() {
       {
         id: 'preview-black-and-white',
         processor: 'image.blackAndWhite',
-        params: { intensity: bwIntensity, neutrals, tone },
+        params: { intensity: bwIntensity, neutrals, tone, grain: 0 },
       },
       {
         id: 'preview-sharpen',

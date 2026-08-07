@@ -57,8 +57,9 @@ describe('recipeSchema', () => {
     // step-4 (image.adjustLight) omits highlights/shadows on input -- they
     // default to 0 on parse (TASK-highlights-shadows-tonelut.md); step-5
     // (image.adjustColor) omits castStrength -- it defaults to 0 on parse
-    // (TASK-adjust-color-cast.md) -- so the round-trip isn't byte-identical
-    // to the input for those two steps.
+    // (TASK-adjust-color-cast.md); step-6 (image.blackAndWhite) omits grain --
+    // it defaults to 0 on parse (TASK-black-and-white-grain.md) -- so the
+    // round-trip isn't byte-identical to the input for those three steps.
     expect(parsed).toEqual({
       ...recipe,
       steps: recipe.steps.map((step) => {
@@ -67,6 +68,9 @@ describe('recipeSchema', () => {
         }
         if (step.id === 'step-5') {
           return { ...step, params: { ...step.params, castStrength: 0 } }
+        }
+        if (step.id === 'step-6') {
+          return { ...step, params: { ...step.params, grain: 0 } }
         }
         return step
       }),
@@ -281,16 +285,16 @@ describe('adjustColorParamsSchema', () => {
 })
 
 describe('blackAndWhiteParamsSchema', () => {
-  test('accepts all three P0 params at range boundaries', () => {
+  test('accepts all three required P0 params at range boundaries, defaulting grain to 0', () => {
     expect(
       blackAndWhiteParamsSchema.parse({ intensity: 0.0, neutrals: -1.0, tone: -1.0 }),
-    ).toEqual({ intensity: 0.0, neutrals: -1.0, tone: -1.0 })
+    ).toEqual({ intensity: 0.0, neutrals: -1.0, tone: -1.0, grain: 0 })
     expect(
       blackAndWhiteParamsSchema.parse({ intensity: 1.0, neutrals: 1.0, tone: 1.0 }),
-    ).toEqual({ intensity: 1.0, neutrals: 1.0, tone: 1.0 })
+    ).toEqual({ intensity: 1.0, neutrals: 1.0, tone: 1.0, grain: 0 })
   })
 
-  test('requires all three params', () => {
+  test('requires all three required params', () => {
     expect(() =>
       blackAndWhiteParamsSchema.parse({ intensity: 0.5, neutrals: 0 }),
     ).toThrow()
@@ -299,6 +303,24 @@ describe('blackAndWhiteParamsSchema', () => {
   test.each([-0.1, 1.1])('rejects out-of-range intensity %d', (intensity) => {
     expect(() =>
       blackAndWhiteParamsSchema.parse({ intensity, neutrals: 0, tone: 0 }),
+    ).toThrow()
+  })
+
+  test('grain defaults to 0 when omitted', () => {
+    expect(
+      blackAndWhiteParamsSchema.parse({ intensity: 0, neutrals: 0, tone: 0 }),
+    ).toEqual({ intensity: 0, neutrals: 0, tone: 0, grain: 0 })
+  })
+
+  test.each([0.0, 1.0])('accepts grain at boundary %d', (grain) => {
+    expect(
+      blackAndWhiteParamsSchema.parse({ intensity: 0, neutrals: 0, tone: 0, grain }),
+    ).toEqual({ intensity: 0, neutrals: 0, tone: 0, grain })
+  })
+
+  test.each([-0.1, 1.1])('rejects out-of-range grain %d', (grain) => {
+    expect(() =>
+      blackAndWhiteParamsSchema.parse({ intensity: 0, neutrals: 0, tone: 0, grain }),
     ).toThrow()
   })
 })

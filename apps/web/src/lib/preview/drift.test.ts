@@ -338,8 +338,8 @@ describe('recipe fidelity drift (V-2)', () => {
   ]
 
   const bwPoints = [
-    { name: 'bw-full', params: { intensity: 1.0, neutrals: 0.0, tone: 0.0 } },
-    { name: 'bw-skewed', params: { intensity: 0.6, neutrals: 0.5, tone: -0.3 } },
+    { name: 'bw-full', params: { intensity: 1.0, neutrals: 0.0, tone: 0.0, grain: 0.0 } },
+    { name: 'bw-skewed', params: { intensity: 0.6, neutrals: 0.5, tone: -0.3, grain: 0.0 } },
   ]
 
   const sharpenPoints = [

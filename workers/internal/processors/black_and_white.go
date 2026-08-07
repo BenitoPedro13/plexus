@@ -12,6 +12,20 @@ import (
 // (neutrals=0) grayscale conversion, expressed as an exact fraction.
 const blackAndWhiteBaseWeight = 1.0 / 3.0
 
+// grainMaxSigma is the vips_gaussnoise sigma (0-255 uchar scale) at
+// grain=1.0. A first-pass upper bound, not empirically tuned against real
+// photos — same status as grayscaleMatrix's neutrals skew above. Gentler
+// than libvips' own gaussnoise default of 30 (docs/tasks/
+// TASK-black-and-white-grain.md's verification). Revisit per D-29's
+// trigger: the first time a real photo is dragged through /editor.
+const grainMaxSigma = 25.0
+
+// grainNoiseSeed fixes vips_gaussnoise's seed so grain output is
+// deterministic — required for golden-fixture tests and for a recipe to
+// reproduce the same output on repeat export (CLAUDE.md's recipe-fidelity
+// requirement). The specific value is arbitrary; determinism is the point.
+const grainNoiseSeed = 42
+
 // grayscaleMatrix builds the 3x3 Recomb matrix that converts to grayscale
 // while skewing the mix toward (positive) or away from (negative) green per
 // neutrals, per docs/tasks/TASK-composite-slider-mapping.md: "matrix rows
@@ -40,21 +54,20 @@ func grayscaleMatrix(neutrals float64) [][]float64 {
 //	intensity: 0.0..1.0 (blend original -> grayscale)
 //	neutrals:  -1.0..1.0 (channel-mix skew, see grayscaleMatrix)
 //	tone:      -1.0..1.0 (contrast, applied to the grayscale layer)
+//	grain:     0.0..1.0, optional, default 0.0 (additive noise, see grainMaxSigma)
 //
 // Composition: grayscale (skewed by neutrals) -> tone (contrast, applied
 // "post-grayscale" per the mapping table) -> linear-blend with the original
-// by intensity. Recomb auto-expands its matrix to preserve a 4th (alpha)
-// band as an identity passthrough (confirmed against
+// by intensity -> grain (additive noise, applied last — a property of the
+// final print, not an input layer). Recomb auto-expands its matrix to
+// preserve a 4th (alpha) band as an identity passthrough (confirmed against
 // github.com/davidbyttow/govips/v2 v2.18.0's Recomb source), and Linear1
 // applies its scalar uniformly across all bands, so alpha survives the
 // intensity blend unchanged for inputs that have one — not exercised by
 // this package's fixtures (gradient.jpg/gradient.png are both opaque
-// 3-band), so treat that as read-from-source, not measured.
-//
-// Deferred: grain — needs a small workers/internal/govips-fork/vips/
-// extension for a public Gaussnoise wrapper before implementation (D-28,
-// same precedent as D-24's Tonelut fork), see docs/90-deferred-register.md
-// and docs/tasks/TASK-vibrance-cast-grain-spike.md.
+// 3-band), so treat that as read-from-source, not measured. grain's alpha
+// safety (band-matched, zero-valued alpha addend) is measured, per
+// docs/tasks/TASK-black-and-white-grain.md.
 func BlackAndWhite(_ context.Context, jobStepID, inputRef string, params map[string]interface{}) (string, error) {
 	intensity, err := requireFloatParamInRange(params, "intensity", 0.0, 1.0)
 	if err != nil {
@@ -65,6 +78,10 @@ func BlackAndWhite(_ context.Context, jobStepID, inputRef string, params map[str
 		return "", err
 	}
 	tone, err := requireFloatParamInRange(params, "tone", -1.0, 1.0)
+	if err != nil {
+		return "", err
+	}
+	grain, err := optionalFloatParamInRange(params, "grain", 0.0, 0.0, 1.0)
 	if err != nil {
 		return "", err
 	}
@@ -103,10 +120,56 @@ func BlackAndWhite(_ context.Context, jobStepID, inputRef string, params map[str
 		return "", fmt.Errorf("blend grayscale into original: %w", err)
 	}
 
+	if grain != 0 {
+		if err := applyGrain(img, grain); err != nil {
+			return "", err
+		}
+	}
+
 	data, err := exportFormat(img, format, defaultQuality)
 	if err != nil {
 		return "", err
 	}
 
 	return writeOutput(jobStepID, format, data)
+}
+
+// applyGrain adds zero-mean Gaussian noise to img in place, scaled by
+// intensity (0.0..1.0) up to grainMaxSigma. Uses plain arithmetic Add
+// rather than Composite/BlendMode — verified (TASK-black-and-white-grain.md)
+// that Composite's "add" blend mode synthesizes an unwanted 4th alpha band
+// on alpha-less inputs, while Add does not. The noise image is built at
+// img's own dimensions (a size mismatch silently changes Add's output size
+// rather than erroring) and replicated to match img's band count exactly:
+// three bands of identical noise (an achromatic broadcast, confirmed
+// empirically) plus, only if img has alpha, one constant-zero band so the
+// alpha channel gets a no-op +0 rather than picking up noise itself.
+func applyGrain(img *vips.ImageRef, grain float64) error {
+	sigma := grain * grainMaxSigma
+	mean := 0.0
+	seed := grainNoiseSeed
+
+	noise, err := vips.NewGaussnoiseImage(img.Width(), img.Height(), &vips.GaussnoiseOptions{
+		Sigma: &sigma,
+		Mean:  &mean,
+		Seed:  &seed,
+	})
+	if err != nil {
+		return fmt.Errorf("generate grain noise: %w", err)
+	}
+	defer noise.Close()
+
+	if err := noise.BandJoin(noise, noise); err != nil {
+		return fmt.Errorf("replicate grain noise to color bands: %w", err)
+	}
+	if img.HasAlpha() {
+		if err := noise.BandJoinConst([]float64{0}); err != nil {
+			return fmt.Errorf("pad grain noise with zero alpha band: %w", err)
+		}
+	}
+
+	if err := img.Add(noise); err != nil {
+		return fmt.Errorf("apply grain: %w", err)
+	}
+	return nil
 }

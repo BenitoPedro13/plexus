@@ -196,22 +196,22 @@ describe('computeMeanRGB', () => {
 
 describe('applyBlackAndWhite', () => {
   it('intensity=0 is identity', () => {
-    const result = applyBlackAndWhite(RED, { intensity: 0, neutrals: 0, tone: 0 })
+    const result = applyBlackAndWhite(RED, { intensity: 0, neutrals: 0, tone: 0, grain: 0 })
     expect(result.r).toBeCloseTo(RED.r)
     expect(result.g).toBeCloseTo(RED.g)
     expect(result.b).toBeCloseTo(RED.b)
   })
 
   it('intensity=1 produces R=G=B', () => {
-    const result = applyBlackAndWhite(RED, { intensity: 1, neutrals: 0, tone: 0 })
+    const result = applyBlackAndWhite(RED, { intensity: 1, neutrals: 0, tone: 0, grain: 0 })
     expect(result.r).toBeCloseTo(result.g)
     expect(result.g).toBeCloseTo(result.b)
   })
 
   it('positive neutrals skews the gray weight toward green (mirrors grayscaleMatrix)', () => {
     const greenish: RGBA = { r: 0.2, g: 0.9, b: 0.2, a: 1 }
-    const skewedUp = applyBlackAndWhite(greenish, { intensity: 1, neutrals: 1, tone: 0 })
-    const skewedDown = applyBlackAndWhite(greenish, { intensity: 1, neutrals: -1, tone: 0 })
+    const skewedUp = applyBlackAndWhite(greenish, { intensity: 1, neutrals: 1, tone: 0, grain: 0 })
+    const skewedDown = applyBlackAndWhite(greenish, { intensity: 1, neutrals: -1, tone: 0, grain: 0 })
     // more green weight on a green-heavy pixel -> brighter gray output
     expect(skewedUp.r).toBeGreaterThan(skewedDown.r)
   })

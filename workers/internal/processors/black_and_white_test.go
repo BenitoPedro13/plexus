@@ -99,6 +99,106 @@ func TestBlackAndWhite(t *testing.T) {
 		}
 	})
 
+	t.Run("grain absent and grain=0 are identical (default no-op)", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+
+		absent := blackAndWhite(t, "step-absent", map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0),
+		})
+		explicit := blackAndWhite(t, "step-explicit", map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0), "grain": float64(0),
+		})
+
+		if !bytesEqual(t, absent, explicit) {
+			t.Fatal("expected omitted grain and grain=0 to produce byte-identical output")
+		}
+	})
+
+	t.Run("grain=1 measurably increases pixel-value variance", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+
+		plain := blackAndWhite(t, "step-plain", map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0), "grain": float64(0),
+		})
+		grained := blackAndWhite(t, "step-grained", map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0), "grain": float64(1),
+		})
+
+		plainSpread := sampledVariance(t, plain)
+		grainedSpread := sampledVariance(t, grained)
+
+		if grainedSpread <= plainSpread {
+			t.Fatalf("expected grain=1 to increase sampled variance above grain=0, got plain=%v grained=%v", plainSpread, grainedSpread)
+		}
+	})
+
+	t.Run("grain=1 keeps the average close to the ungrained baseline (zero-mean noise)", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+
+		base := imageAverage(t, blackAndWhite(t, "step-base", map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0), "grain": float64(0),
+		}))
+		grained := imageAverage(t, blackAndWhite(t, "step-grained", map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0), "grain": float64(1),
+		}))
+
+		if diff := grained - base; diff > 5 || diff < -5 {
+			t.Fatalf("expected grain=1 average within 5 of grain=0 baseline (%v), got %v", base, grained)
+		}
+	})
+
+	t.Run("grain output is deterministic across runs", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+
+		params := map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0), "grain": float64(0.5),
+		}
+		first := blackAndWhite(t, "step-first", params)
+		second := blackAndWhite(t, "step-second", params)
+
+		if !bytesEqual(t, first, second) {
+			t.Fatal("expected identical grain params to produce byte-identical output across runs")
+		}
+	})
+
+	t.Run("grain=1 on an RGBA input leaves alpha unchanged", func(t *testing.T) {
+		dir := t.TempDir()
+		t.Setenv("WORKER_STORAGE_DIR", dir)
+
+		rgbaPath := writeUniformRGBAPNG(t, dir, 200, 120, 80, 180)
+
+		outputRef, err := processors.BlackAndWhite(context.Background(), "step-rgba", rgbaPath, map[string]interface{}{
+			"intensity": float64(1), "neutrals": float64(0), "tone": float64(0), "grain": float64(1),
+		})
+		if err != nil {
+			t.Fatalf("BlackAndWhite: %v", err)
+		}
+
+		img, err := vips.NewImageFromFile(outputRef)
+		if err != nil {
+			t.Fatalf("load output %q: %v", outputRef, err)
+		}
+		defer img.Close()
+
+		if !img.HasAlpha() {
+			t.Fatal("expected output to keep an alpha band")
+		}
+
+		alphaBand, err := img.ExtractBandToImage(img.Bands()-1, 1)
+		if err != nil {
+			t.Fatalf("extract alpha band: %v", err)
+		}
+		defer alphaBand.Close()
+
+		alphaAvg, err := alphaBand.Average()
+		if err != nil {
+			t.Fatalf("average alpha band: %v", err)
+		}
+		if diff := alphaAvg - 180; diff > 1 || diff < -1 {
+			t.Fatalf("expected alpha band to remain ~180 (unchanged by grain), got %v", alphaAvg)
+		}
+	})
+
 	for _, key := range []string{"intensity", "neutrals", "tone"} {
 		key := key
 		t.Run("missing "+key+" is a validation error", func(t *testing.T) {
@@ -127,6 +227,8 @@ func TestBlackAndWhite(t *testing.T) {
 		{"neutrals", 1.1},
 		{"tone", -1.1},
 		{"tone", 1.1},
+		{"grain", -0.1},
+		{"grain", 1.1},
 	} {
 		tc := tc
 		t.Run(tc.key+" out of range is a validation error", func(t *testing.T) {

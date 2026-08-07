@@ -21,7 +21,7 @@ interface EditState {
   sharpenIntensity: number
 }
 
-const identityBwParams: BlackAndWhiteParams = { intensity: 0, neutrals: 0, tone: 0 }
+const identityBwParams: BlackAndWhiteParams = { intensity: 0, neutrals: 0, tone: 0, grain: 0 }
 const identityColorParams: AdjustColorParams = { saturation: 0, castStrength: 0 }
 
 const initialEditState: EditState = {

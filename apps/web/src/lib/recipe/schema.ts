@@ -73,13 +73,15 @@ export const adjustColorParamsSchema = z.object({
 
 export type AdjustColorParams = z.infer<typeof adjustColorParamsSchema>
 
-// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
-// Deferred param (grain — needs a govips-fork Gaussnoise wrapper first,
-// D-28) intentionally omitted, see docs/90-deferred-register.md.
+// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table,
+// extended by docs/tasks/TASK-black-and-white-grain.md (resolved D-28). grain is
+// optional/defaulted (0.0 = no-op), like adjustColorParamsSchema's castStrength, so
+// pre-existing recipes authored before this task don't need updating.
 export const blackAndWhiteParamsSchema = z.object({
   intensity: z.number().min(0.0).max(1.0),
   neutrals: z.number().min(-1.0).max(1.0),
   tone: z.number().min(-1.0).max(1.0),
+  grain: z.number().min(0.0).max(1.0).default(0.0),
 })
 
 export type BlackAndWhiteParams = z.infer<typeof blackAndWhiteParamsSchema>
