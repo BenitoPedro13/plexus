@@ -74,7 +74,7 @@ export const jobSteps = pgTable('job_steps', {
   // time, same pattern processor/params already use. Drives
   // JobDispatchService's ready-step computation; empty means "ready as soon
   // as the job starts, input is the job's own inputRef."
-  dependsOn: jsonb('depends_on').$type<string[]>().notNull(),
+  dependsOn: jsonb('depends_on').$type<string[]>().notNull().default([]),
   order: integer('order').notNull(),
   status: jobStepStatusEnum('status').notNull().default('PENDING'),
   startedAt: timestamp('started_at', { withTimezone: true }),

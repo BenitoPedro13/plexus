@@ -1,5 +1,5 @@
 {
-  "id": "46a6b49c-bcb4-4351-a53d-97edefc4e2ba",
+  "id": "b0dce783-2cd5-4dcd-ba8c-9571c21f2ef3",
   "prevId": "0f95901f-4f05-47bd-b37c-bba02afcedc6",
   "version": "7",
   "dialect": "postgresql",
@@ -43,7 +43,8 @@
           "name": "depends_on",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "order": {
           "name": "order",

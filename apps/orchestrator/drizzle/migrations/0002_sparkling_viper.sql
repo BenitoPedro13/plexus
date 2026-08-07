@@ -1,1 +1,0 @@
-ALTER TABLE "job_steps" ADD COLUMN "depends_on" jsonb NOT NULL;
