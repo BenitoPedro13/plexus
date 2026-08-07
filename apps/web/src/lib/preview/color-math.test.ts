@@ -7,6 +7,7 @@ import {
   applyUnsharpMask,
   collectOrderedAdjustmentSteps,
   gaussianKernel1D,
+  highlightsShadowsL,
   type RGBA,
 } from './color-math'
 
@@ -37,6 +38,64 @@ describe('applyAdjustLight', () => {
     const translucent: RGBA = { r: 0.5, g: 0.5, b: 0.5, a: 0.3 }
     const result = applyAdjustLight(translucent, { exposure: 2, brightness: -0.5, contrast: 0.8, blackPoint: 0.5, highlights: 0, shadows: 0 })
     expect(result.a).toBe(0.3)
+  })
+
+  it('skips the Lab round-trip when highlights/shadows are both 0 (fast path, D-25)', () => {
+    const result = applyAdjustLight(GRAY, { exposure: 0.2, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0 })
+    expect(result.r).toBe(Math.min(1, Math.max(0, GRAY.r * Math.pow(2, 0.2))))
+  })
+
+  // L* ~ 25.8 (govips' shadow fixture region) -- lands on the falling edge
+  // of tonelut's shad() bump (peak at L=Ls=20), outside high()'s support
+  // (starts at Lm=50), so shadows should move it and highlights shouldn't.
+  const DARK: RGBA = { r: 0.24, g: 0.24, b: 0.24, a: 1 }
+  // L* ~ 76.6 -- rising edge of high()'s bump (peak at Lh=80), outside
+  // shad()'s support (ends at Lm=50).
+  const LIGHT: RGBA = { r: 0.74, g: 0.74, b: 0.74, a: 1 }
+
+  it('positive shadows brightens a dark pixel (mirrors adjust_light.go\'s S sign convention)', () => {
+    const identity = applyAdjustLight(DARK, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0 })
+    const result = applyAdjustLight(DARK, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0.7 })
+    expect(result.r).toBeGreaterThan(identity.r)
+  })
+
+  it('positive highlights darkens a light pixel (Apple Photos convention, opposite of libvips\' raw H)', () => {
+    const identity = applyAdjustLight(LIGHT, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0 })
+    const result = applyAdjustLight(LIGHT, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0.7, shadows: 0 })
+    expect(result.r).toBeLessThan(identity.r)
+  })
+
+  it('shadows leaves a light pixel unaffected (outside shad()\'s support range)', () => {
+    const identity = applyAdjustLight(LIGHT, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0 })
+    const result = applyAdjustLight(LIGHT, { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0.7 })
+    expect(result.r).toBeCloseTo(identity.r, 2)
+  })
+})
+
+describe('highlightsShadowsL', () => {
+  it('is the identity at any L when both are 0', () => {
+    expect(highlightsShadowsL(20, 0, 0)).toBeCloseTo(20)
+    expect(highlightsShadowsL(80, 0, 0)).toBeCloseTo(80)
+  })
+
+  it('midtones (L=Lm=50) are unaffected by either -- both bumps are 0 at Lm', () => {
+    expect(highlightsShadowsL(50, 0.5, 0.5)).toBeCloseTo(50)
+  })
+
+  it('positive shadows raises L at the shadow bump\'s peak (L=Ls=20) without touching the highlight peak (L=Lh=80)', () => {
+    expect(highlightsShadowsL(20, 0, 0.5)).toBeGreaterThan(20)
+    expect(highlightsShadowsL(80, 0, 0.5)).toBeCloseTo(80)
+  })
+
+  it('positive highlights lowers L at the highlight bump\'s peak (L=Lh=80) without touching the shadow peak (L=Ls=20)', () => {
+    expect(highlightsShadowsL(80, 0.5, 0)).toBeLessThan(80)
+    expect(highlightsShadowsL(20, 0.5, 0)).toBeCloseTo(20)
+  })
+
+  it('clamps to [0, 100] at the maximum adjustment (mirrors Go\'s LUT clamp)', () => {
+    const result = highlightsShadowsL(20, 0, 1)
+    expect(result).toBeLessThanOrEqual(100)
+    expect(result).toBeGreaterThanOrEqual(0)
   })
 })
 

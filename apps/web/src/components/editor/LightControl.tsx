@@ -83,6 +83,28 @@ export function LightControl({ value, onChange, onCommit }: LightControlProps) {
             onChange={(event) => onChange({ ...value, blackPoint: Number(event.target.value) })}
           />
         </label>
+        <label>
+          Highlights ({value.highlights.toFixed(2)})
+          <input
+            type="range"
+            min={-1}
+            max={1}
+            step={0.05}
+            value={value.highlights}
+            onChange={(event) => onChange({ ...value, highlights: Number(event.target.value) })}
+          />
+        </label>
+        <label>
+          Shadows ({value.shadows.toFixed(2)})
+          <input
+            type="range"
+            min={-1}
+            max={1}
+            step={0.05}
+            value={value.shadows}
+            onChange={(event) => onChange({ ...value, shadows: Number(event.target.value) })}
+          />
+        </label>
       </details>
     </fieldset>
   )

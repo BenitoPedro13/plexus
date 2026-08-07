@@ -122,15 +122,34 @@ vec3 labToRgb(vec3 lab) {
 `
 
 // Mirrors color-math.ts's applyAdjustLight -- uParams: exposure,
-// brightness, contrast, blackPoint. RGB only; alpha passed through
-// unchanged (D-20, docs/90-deferred-register.md).
-const ADJUST_LIGHT_FRAGMENT_SHADER_SOURCE = /* glsl */ `#version 300 es
+// brightness, contrast, blackPoint; uParams2: highlights, shadows (.zw
+// unused). RGB only; alpha passed through unchanged (D-20,
+// docs/90-deferred-register.md). Two vec4 uniforms (not one) because six
+// params don't fit one -- see ContentProgram's paramsLocation2.
+//
+// highlights/shadows: mirrors color-math.ts's highlightsShadowsL -- libvips'
+// tonelut curve (confirmed from libvips/create/tonelut.c) collapses to two
+// smoothstep() calls; see that file's comment for the full derivation. Runs
+// in Lab space (LAB_HELPERS_GLSL) after the RGB exposure/brightness/
+// contrast/blackPoint chain, matching adjust_light.go's pass order.
+const ADJUST_LIGHT_FRAGMENT_SHADER_SOURCE =
+  /* glsl */ `#version 300 es
 precision highp float;
 
 uniform vec4 uParams;
+uniform vec4 uParams2;
 uniform sampler2D uSource;
 in vec2 vUV;
 out vec4 outColor;
+` +
+  LAB_HELPERS_GLSL +
+  /* glsl */ `
+const float TONELUT_LB = 0.0;
+const float TONELUT_LS = 20.0;
+const float TONELUT_LM = 50.0;
+const float TONELUT_LH = 80.0;
+const float TONELUT_LW = 100.0;
+const float TONELUT_ADJUST_SCALE = 30.0;
 
 float adjustLightChannel(float c) {
   float exposure = uParams.x;
@@ -145,9 +164,30 @@ float adjustLightChannel(float c) {
   return clamp(x, 0.0, 1.0);
 }
 
+float highlightsShadowsL(float l, float highlights, float shadows) {
+  float shad = smoothstep(TONELUT_LB, TONELUT_LS, l) - smoothstep(TONELUT_LS, TONELUT_LM, l);
+  float high = smoothstep(TONELUT_LM, TONELUT_LH, l) - smoothstep(TONELUT_LH, TONELUT_LW, l);
+  float s = shadows * TONELUT_ADJUST_SCALE;
+  float h = -highlights * TONELUT_ADJUST_SCALE;
+  return clamp(l + s * shad + h * high, TONELUT_LB, TONELUT_LW);
+}
+
 void main() {
   vec4 c = texture(uSource, vUV);
-  outColor = vec4(adjustLightChannel(c.r), adjustLightChannel(c.g), adjustLightChannel(c.b), c.a);
+  float r = adjustLightChannel(c.r);
+  float g = adjustLightChannel(c.g);
+  float b = adjustLightChannel(c.b);
+
+  float highlights = uParams2.x;
+  float shadows = uParams2.y;
+  if (highlights == 0.0 && shadows == 0.0) {
+    outColor = vec4(r, g, b, c.a);
+    return;
+  }
+
+  vec3 lab = rgbToLab(vec3(r, g, b));
+  float newL = highlightsShadowsL(lab.x, highlights, shadows);
+  outColor = vec4(labToRgb(vec3(newL, lab.y, lab.z)), c.a);
 }
 `
 
@@ -358,6 +398,11 @@ function createFramebuffer(gl: WebGL2RenderingContext, texture: WebGLTexture): W
 interface ContentProgram {
   program: WebGLProgram
   paramsLocation: WebGLUniformLocation | null
+  // Second vec4 uniform ("uParams2") -- null for every program except
+  // adjustLight, which needs 6 params (see ADJUST_LIGHT_FRAGMENT_SHADER_SOURCE).
+  // getUniformLocation() itself returns null for a name the shader doesn't
+  // declare, so requesting it unconditionally in buildContentProgram is safe.
+  paramsLocation2: WebGLUniformLocation | null
   textureLocations: (WebGLUniformLocation | null)[]
 }
 
@@ -437,6 +482,7 @@ export class WebGL2Renderer implements PreviewRenderer {
       return {
         program,
         paramsLocation: gl.getUniformLocation(program, 'uParams'),
+        paramsLocation2: gl.getUniformLocation(program, 'uParams2'),
         textureLocations: textureUniformNames.map((name) => gl.getUniformLocation(program, name)),
       }
     }
@@ -480,6 +526,10 @@ export class WebGL2Renderer implements PreviewRenderer {
     if (uniformValues) {
       const [x = 0, y = 0, z = 0, w = 0] = uniformValues
       gl.uniform4f(target.paramsLocation, x, y, z, w)
+      if (uniformValues.length > 4) {
+        const [x2 = 0, y2 = 0, z2 = 0, w2 = 0] = uniformValues.slice(4)
+        gl.uniform4f(target.paramsLocation2, x2, y2, z2, w2)
+      }
     }
 
     textures.forEach((texture, i) => {
@@ -497,8 +547,13 @@ export class WebGL2Renderer implements PreviewRenderer {
   private runAdjustmentStep(step: AdjustmentStep, input: WebGLTexture, outputFbo: WebGLFramebuffer): void {
     switch (step.processor) {
       case 'image.adjustLight': {
-        const { exposure, brightness, contrast, blackPoint } = step.params
-        this.runContentPass(this.adjustLight!, [exposure, brightness, contrast, blackPoint], [input], outputFbo)
+        const { exposure, brightness, contrast, blackPoint, highlights, shadows } = step.params
+        this.runContentPass(
+          this.adjustLight!,
+          [exposure, brightness, contrast, blackPoint, highlights, shadows],
+          [input],
+          outputFbo,
+        )
         return
       }
       case 'image.adjustColor': {

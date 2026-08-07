@@ -229,7 +229,12 @@ interface DriftBounds {
 }
 
 // Light: near bit-exact (Linear1 in Go, same affine math in TS) -- worst
-// observed mae=0.379, max=1.16, meanDeltaE=0.292 (light-strong).
+// observed mae=0.379, max=1.16, meanDeltaE=0.292 (light-strong). Extended by
+// TASK-highlights-shadows-preview-parity.md (D-25) with two isolated
+// highlights/shadows points exercising the new Lab-space tonelut pass:
+// light-shadows-strong mae=0.092/max=0.796/meanDeltaE=0.043,
+// light-highlights-strong mae=0.218/max=0.892/meanDeltaE=0.123 -- both well
+// under light-strong's worst case, so the bound is unchanged.
 const LIGHT_BOUNDS: DriftBounds = { mae: 0.6, max: 1.5, meanDeltaE: 0.4 }
 
 // Color: near bit-exact (Lab round-trip matches govips's Modulate/LCH
@@ -285,6 +290,18 @@ describe('recipe fidelity drift (V-2)', () => {
     {
       name: 'light-strong',
       params: { exposure: -0.5, brightness: -0.2, contrast: 0.3, blackPoint: 0.1, highlights: 0, shadows: 0 },
+    },
+    // Isolated single-param points (docs/tasks/TASK-highlights-shadows-preview-parity.md,
+    // resolving D-25) exercising the new Lab-space tonelut pass in
+    // applyAdjustLight, kept separate from the RGB-chain points above so
+    // drift is attributable to one or the other, not both at once.
+    {
+      name: 'light-shadows-strong',
+      params: { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0, shadows: 0.7 },
+    },
+    {
+      name: 'light-highlights-strong',
+      params: { exposure: 0, brightness: 0, contrast: 0, blackPoint: 0, highlights: 0.7, shadows: 0 },
     },
   ]
 

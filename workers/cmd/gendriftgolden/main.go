@@ -47,6 +47,11 @@ var goldenPoints = []struct {
 		points: []point{
 			{"light-mild", map[string]interface{}{"exposure": 0.5, "brightness": 0.1, "contrast": 0.2, "blackPoint": 0.05}},
 			{"light-strong", map[string]interface{}{"exposure": -0.5, "brightness": -0.2, "contrast": 0.3, "blackPoint": 0.1}},
+			// Isolated single-param points (docs/tasks/TASK-highlights-shadows-preview-parity.md,
+			// resolving D-25) so drift from the new Lab-space tonelut pass isn't
+			// mixed with the existing RGB-chain params' drift.
+			{"light-shadows-strong", map[string]interface{}{"exposure": 0.0, "brightness": 0.0, "contrast": 0.0, "blackPoint": 0.0, "shadows": 0.7}},
+			{"light-highlights-strong", map[string]interface{}{"exposure": 0.0, "brightness": 0.0, "contrast": 0.0, "blackPoint": 0.0, "highlights": 0.7}},
 		},
 	},
 	{

@@ -47,7 +47,14 @@ function deriveRecipe(state: EditState): Recipe {
   ]
 
   const { light } = state
-  if (light.exposure !== 0 || light.brightness !== 0 || light.contrast !== 0 || light.blackPoint !== 0) {
+  if (
+    light.exposure !== 0 ||
+    light.brightness !== 0 ||
+    light.contrast !== 0 ||
+    light.blackPoint !== 0 ||
+    light.highlights !== 0 ||
+    light.shadows !== 0
+  ) {
     steps.push({ id: 'light', processor: 'image.adjustLight', params: light })
   }
 

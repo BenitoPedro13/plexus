@@ -152,21 +152,37 @@ fn labToRgb(lab: vec3f) -> vec3f {
 }
 `
 
-// Mirrors color-math.ts's applyAdjustLight -- params: exposure, brightness,
-// contrast, blackPoint (in that order in the uniform vec4f). RGB only;
-// alpha passed through unchanged (D-20, docs/90-deferred-register.md).
+// Mirrors color-math.ts's applyAdjustLight -- params[0]: exposure,
+// brightness, contrast, blackPoint; params[1]: highlights, shadows (unused
+// .zw). RGB only; alpha passed through unchanged (D-20,
+// docs/90-deferred-register.md). Two vec4f uniform chunks (not one) because
+// six params don't fit one -- see encodeUniformPass's chunking.
+//
+// highlights/shadows: mirrors color-math.ts's highlightsShadowsL -- libvips'
+// tonelut curve (confirmed from libvips/create/tonelut.c) collapses to two
+// smoothstep() calls; see that file's comment for the full derivation. Runs
+// in Lab space (LAB_HELPERS_BLOCK) after the RGB exposure/brightness/
+// contrast/blackPoint chain, matching adjust_light.go's pass order.
 const ADJUST_LIGHT_WGSL =
   CONTENT_VERTEX_BLOCK +
+  LAB_HELPERS_BLOCK +
   /* wgsl */ `
-@group(0) @binding(0) var<uniform> params: vec4f;
+@group(0) @binding(0) var<uniform> params: array<vec4f, 2>;
 @group(0) @binding(1) var quadSampler: sampler;
 @group(0) @binding(2) var sourceTexture: texture_2d<f32>;
 
+const TONELUT_LB: f32 = 0.0;
+const TONELUT_LS: f32 = 20.0;
+const TONELUT_LM: f32 = 50.0;
+const TONELUT_LH: f32 = 80.0;
+const TONELUT_LW: f32 = 100.0;
+const TONELUT_ADJUST_SCALE: f32 = 30.0;
+
 fn adjustLightChannel(c: f32) -> f32 {
-  let exposure = params.x;
-  let brightness = params.y;
-  let contrast = params.z;
-  let blackPoint = params.w;
+  let exposure = params[0].x;
+  let brightness = params[0].y;
+  let contrast = params[0].z;
+  let blackPoint = params[0].w;
   let denom = max(1.0 - blackPoint, 1e-6);
   var x = c * pow(2.0, exposure);
   x = x + brightness;
@@ -175,10 +191,30 @@ fn adjustLightChannel(c: f32) -> f32 {
   return clamp(x, 0.0, 1.0);
 }
 
+fn highlightsShadowsL(l: f32, highlights: f32, shadows: f32) -> f32 {
+  let shad = smoothstep(TONELUT_LB, TONELUT_LS, l) - smoothstep(TONELUT_LS, TONELUT_LM, l);
+  let high = smoothstep(TONELUT_LM, TONELUT_LH, l) - smoothstep(TONELUT_LH, TONELUT_LW, l);
+  let s = shadows * TONELUT_ADJUST_SCALE;
+  let h = -highlights * TONELUT_ADJUST_SCALE;
+  return clamp(l + s * shad + h * high, TONELUT_LB, TONELUT_LW);
+}
+
 @fragment
 fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
   let c = textureSample(sourceTexture, quadSampler, in.uv);
-  return vec4f(adjustLightChannel(c.r), adjustLightChannel(c.g), adjustLightChannel(c.b), c.a);
+  let r = adjustLightChannel(c.r);
+  let g = adjustLightChannel(c.g);
+  let b = adjustLightChannel(c.b);
+
+  let highlights = params[1].x;
+  let shadows = params[1].y;
+  if (highlights == 0.0 && shadows == 0.0) {
+    return vec4f(r, g, b, c.a);
+  }
+
+  let lab = rgbToLab(vec3f(r, g, b));
+  let newL = highlightsShadowsL(lab.x, highlights, shadows);
+  return vec4f(labToRgb(vec3f(newL, lab.y, lab.z)), c.a);
 }
 `
 
@@ -427,8 +463,14 @@ export class WebGPURenderer implements PreviewRenderer {
     output: GPUTexture,
   ): void {
     const device = this.device!
-    const buffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
-    device.queue.writeBuffer(buffer, 0, new Float32Array([...uniformValues, 0, 0, 0, 0].slice(0, 4)))
+    // Chunked into ceil(n/4) vec4f-sized slots -- every pass but adjustLight
+    // passes <=4 values (one chunk, unchanged behavior); adjustLight passes
+    // 6 (two chunks), matching its `array<vec4f, 2>` uniform declaration.
+    const numChunks = Math.max(1, Math.ceil(uniformValues.length / 4))
+    const padded = new Float32Array(numChunks * 4)
+    padded.set(uniformValues.slice(0, numChunks * 4))
+    const buffer = device.createBuffer({ size: padded.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })
+    device.queue.writeBuffer(buffer, 0, padded)
 
     const entries: GPUBindGroupEntry[] = [
       { binding: 0, resource: { buffer } },
@@ -483,8 +525,14 @@ export class WebGPURenderer implements PreviewRenderer {
   ): void {
     switch (step.processor) {
       case 'image.adjustLight': {
-        const { exposure, brightness, contrast, blackPoint } = step.params
-        this.encodeUniformPass(encoder, this.adjustLightPipeline!, [exposure, brightness, contrast, blackPoint], [input], output)
+        const { exposure, brightness, contrast, blackPoint, highlights, shadows } = step.params
+        this.encodeUniformPass(
+          encoder,
+          this.adjustLightPipeline!,
+          [exposure, brightness, contrast, blackPoint, highlights, shadows],
+          [input],
+          output,
+        )
         return
       }
       case 'image.adjustColor': {

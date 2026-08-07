@@ -37,7 +37,7 @@ function clamp01(x: number): number {
 // band including alpha (no exemption in adjust_light.go), which the shader
 // deliberately does not replicate.
 export function applyAdjustLight(pixel: RGBA, params: AdjustLightParams): RGBA {
-  const { exposure, brightness, contrast, blackPoint } = params
+  const { exposure, brightness, contrast, blackPoint, highlights, shadows } = params
   const denom = Math.max(1 - blackPoint, 1e-6)
 
   const transform = (channel: number): number => {
@@ -48,7 +48,15 @@ export function applyAdjustLight(pixel: RGBA, params: AdjustLightParams): RGBA {
     return clamp01(x)
   }
 
-  return { r: transform(pixel.r), g: transform(pixel.g), b: transform(pixel.b), a: pixel.a }
+  const rgb = { r: transform(pixel.r), g: transform(pixel.g), b: transform(pixel.b) }
+
+  if (highlights === 0 && shadows === 0) {
+    return { ...rgb, a: pixel.a }
+  }
+
+  const lab = rgbToLab(rgb.r, rgb.g, rgb.b)
+  const adjusted = labToRgb({ l: highlightsShadowsL(lab.l, highlights, shadows), a: lab.a, b: lab.b })
+  return { ...adjusted, a: pixel.a }
 }
 
 // --- CIE Lab/LCh (D65), Bruce Lindbloom's reference sRGB<->XYZ matrices ---
@@ -101,7 +109,7 @@ export function rgbToLab(r: number, g: number, b: number): Lab {
   return { l: 116 * fy - 16, a: 500 * (fx - fy), b: 200 * (fy - fz) }
 }
 
-function labToRgb(lab: Lab): { r: number; g: number; b: number } {
+export function labToRgb(lab: Lab): { r: number; g: number; b: number } {
   const fy = (lab.l + 16) / 116
   const fx = fy + lab.a / 500
   const fz = fy - lab.b / 200
@@ -115,6 +123,39 @@ function labToRgb(lab: Lab): { r: number; g: number; b: number } {
   const lb = 0.0556434 * x - 0.2040259 * y + 1.0572252 * z
 
   return { r: clamp01(linearToSrgb(lr)), g: clamp01(linearToSrgb(lg)), b: clamp01(linearToSrgb(lb)) }
+}
+
+// --- highlights/shadows: libvips' tonelut curve, Lab L-band only ---
+// workers/internal/processors/adjust_light.go's applyHighlightsShadows converts to LABS
+// and runs a tonelut(S, H)->maplut pass on the L band. tonelut's own curve (confirmed
+// from libvips/create/tonelut.c, github.com/libvips/libvips, not re-derived from memory
+// per CLAUDE.md §0): with libvips' defaults Lb=0/Lw=100/Ps=0.2/Pm=0.5/Ph=0.8 (adjust_light.go
+// leaves all five untouched), the derived positions are Ls=20, Lm=50, Lh=80, and
+// tone_curve(x) = x + S*shad(x) + H*high(x) (M*mid(x) omitted -- adjust_light.go never
+// sets M). shad/high are each libvips' own four-branch Hermite (3t²-2t³) smoothstep bump,
+// which factors exactly into two smoothstep() calls (algebraically verified against every
+// branch boundary in tonelut.c): shad peaks at 1 at x=Ls, high peaks at 1 at x=Lh, both
+// zero outside their support range. S/H are adjust_light.go's sign convention: S =
+// shadows*30, H = -highlights*30 (highlights positive = darker/recovered, Apple
+// Photos/Lightroom convention -- opposite of libvips' raw "raise highlights" H).
+const TONELUT_LB = 0
+const TONELUT_LS = 20
+const TONELUT_LM = 50
+const TONELUT_LH = 80
+const TONELUT_LW = 100
+const TONELUT_ADJUST_SCALE = 30
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = clamp01((x - edge0) / (edge1 - edge0))
+  return t * t * (3 - 2 * t)
+}
+
+export function highlightsShadowsL(l: number, highlights: number, shadows: number): number {
+  const shad = smoothstep(TONELUT_LB, TONELUT_LS, l) - smoothstep(TONELUT_LS, TONELUT_LM, l)
+  const high = smoothstep(TONELUT_LM, TONELUT_LH, l) - smoothstep(TONELUT_LH, TONELUT_LW, l)
+  const s = shadows * TONELUT_ADJUST_SCALE
+  const h = -highlights * TONELUT_ADJUST_SCALE
+  return Math.min(TONELUT_LW, Math.max(TONELUT_LB, l + s * shad + h * high))
 }
 
 // Mirrors workers/internal/processors/adjust_color.go's
