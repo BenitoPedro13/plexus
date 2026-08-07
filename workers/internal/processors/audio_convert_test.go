@@ -2,6 +2,7 @@ package processors_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/benitopedro13/plexus/workers/internal/processors"
@@ -64,6 +65,20 @@ func TestAudioConvert(t *testing.T) {
 			"format": "flac",
 		}); err == nil {
 			t.Fatal("expected error for unsupported format, got nil")
+		}
+	})
+
+	t.Run("input with no audio stream is a clear error", func(t *testing.T) {
+		t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+
+		_, err := processors.AudioConvert(context.Background(), "step", fixtureNoAudio, map[string]interface{}{
+			"format": "mp3",
+		})
+		if err == nil {
+			t.Fatal("expected error for input with no audio stream, got nil")
+		}
+		if !strings.Contains(err.Error(), "no audio stream") {
+			t.Fatalf("expected error to mention \"no audio stream\", got: %v", err)
 		}
 	})
 }

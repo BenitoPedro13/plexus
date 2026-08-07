@@ -38,6 +38,9 @@ func AudioConvert(ctx context.Context, jobStepID, inputRef string, params map[st
 	args = append(args, out)
 
 	if err := runFFmpeg(ctx, args...); err != nil {
+		if isNoAudioStreamError(err) {
+			return "", fmt.Errorf("input %q has no audio stream to convert: %w", inputRef, err)
+		}
 		return "", fmt.Errorf("convert %q to %s: %w", inputRef, format, err)
 	}
 

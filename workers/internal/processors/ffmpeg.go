@@ -9,6 +9,25 @@ import (
 	"strings"
 )
 
+// noAudioStreamMarker is the stderr ffmpeg emits when an explicit "-map
+// 0:a:0" (used by audio.extract/audio.convert to select the first audio
+// stream) matches nothing because the input has no audio stream at all.
+// ffmpeg rejects the map before it even opens the input, so this is
+// reliably distinguishable from other option-parse failures by this exact
+// wording rather than by exit code (234 is ffmpeg's generic "bad option"
+// code, not specific to this case).
+const noAudioStreamMarker = "Stream map '' matches no streams"
+
+// isNoAudioStreamError reports whether err (as returned by runFFmpeg) is
+// ffmpeg failing to satisfy an explicit "-map 0:a:0" because the input has
+// no audio stream — the raw message is accurate but reads as an ffmpeg
+// CLI-syntax error ("Stream map ”", "add a trailing '?'") rather than
+// "this input has no audio", so callers translate it into a clear domain
+// error instead of letting it reach job-failure output verbatim.
+func isNoAudioStreamError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), noAudioStreamMarker)
+}
+
 // runFFmpeg runs the ffmpeg binary with args, always prepending flags that
 // keep it non-interactive and quiet on success: -nostdin (never block
 // waiting for a terminal), -hide_banner -loglevel error (only emit output on

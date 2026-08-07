@@ -9,10 +9,15 @@ import (
 
 // tiny.mp4 / tiny.webm are 32x32, 0.5s committed fixtures — see
 // docs/tasks/TASK-video-audio-processors.md.
+// tiny-noaudio.mp4 is a 32x32, 0.5s video-only fixture (same generation
+// recipe as tiny.mp4 minus the audio input) — used to exercise the
+// no-audio-stream error path in audio.extract/audio.convert, see
+// docs/tasks/TASK-audio-no-stream-error.md.
 const (
-	fixtureMP4  = "../../testdata/media/tiny.mp4"
-	fixtureWebM = "../../testdata/media/tiny.webm"
-	fixtureMP3  = "../../testdata/media/tiny.mp3"
+	fixtureMP4     = "../../testdata/media/tiny.mp4"
+	fixtureWebM    = "../../testdata/media/tiny.webm"
+	fixtureMP3     = "../../testdata/media/tiny.mp3"
+	fixtureNoAudio = "../../testdata/media/tiny-noaudio.mp4"
 )
 
 func TestVideoTranscode(t *testing.T) {

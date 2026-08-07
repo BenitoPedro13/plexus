@@ -41,6 +41,9 @@ func AudioExtract(ctx context.Context, jobStepID, inputRef string, params map[st
 	}
 
 	if err := runFFmpeg(ctx, "-i", inputRef, "-vn", "-map", "0:a:0", "-c:a", codec, "-b:a", fmt.Sprintf("%dk", bitrate), out); err != nil {
+		if isNoAudioStreamError(err) {
+			return "", fmt.Errorf("input %q has no audio stream to extract: %w", inputRef, err)
+		}
 		return "", fmt.Errorf("extract audio from %q as %s: %w", inputRef, format, err)
 	}
 
