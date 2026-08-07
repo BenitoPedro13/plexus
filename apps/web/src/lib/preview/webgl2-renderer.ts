@@ -221,8 +221,12 @@ void main() {
 
   float castStrength = uParams.y;
   vec3 mean = texelFetch(uMean, ivec2(0, 0), 0).rgb;
-  float target = (mean.r + mean.g + mean.b) / 3.0;
-  vec3 scale = 1.0 + castStrength * (target / max(mean, vec3(CAST_MEAN_EPSILON)) - vec3(1.0));
+  // Named greyTarget (not target) to match webgpu-renderer.ts's
+  // ADJUST_COLOR_WGSL, which must avoid "target" -- a WGSL reserved word.
+  // "target" is fine in GLSL ES; renamed here only for cross-shader
+  // consistency.
+  float greyTarget = (mean.r + mean.g + mean.b) / 3.0;
+  vec3 scale = 1.0 + castStrength * (greyTarget / max(mean, vec3(CAST_MEAN_EPSILON)) - vec3(1.0));
   vec3 castCorrected = c.rgb * scale;
 
   vec3 lab = rgbToLab(castCorrected);

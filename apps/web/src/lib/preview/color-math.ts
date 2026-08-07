@@ -205,9 +205,12 @@ export function computeMeanRGB(pixels: readonly RGBA[]): MeanRGB {
 // grey-world correction). Runs before the saturation/chroma boost below,
 // matching Go's pass order (applyCast, then Modulate).
 function applyCast(pixel: RGBA, castStrength: number, mean: MeanRGB): RGBA {
-  const target = (mean.r + mean.g + mean.b) / 3
+  // Named greyTarget, not target, for consistency with
+  // webgpu-renderer.ts's ADJUST_COLOR_WGSL, which must avoid "target" -- a
+  // WGSL reserved word (docs/tasks/TASK-fix-adjustcolor-wgsl-reserved-word.md).
+  const greyTarget = (mean.r + mean.g + mean.b) / 3
   const scale = (channel: number, channelMean: number): number =>
-    channel * (1 + castStrength * (target / Math.max(channelMean, CAST_MEAN_EPSILON) - 1))
+    channel * (1 + castStrength * (greyTarget / Math.max(channelMean, CAST_MEAN_EPSILON) - 1))
   return {
     r: scale(pixel.r, mean.r),
     g: scale(pixel.g, mean.g),

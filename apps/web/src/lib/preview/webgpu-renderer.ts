@@ -245,8 +245,13 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
 
   let castStrength = params.y;
   let mean = textureLoad(meanTexture, vec2i(0, 0), 0).rgb;
-  let target = (mean.r + mean.g + mean.b) / 3.0;
-  let scale = 1.0 + castStrength * (target / max(mean, vec3f(CAST_MEAN_EPSILON)) - vec3f(1.0));
+  // "target" is a WGSL reserved word (reserved for future use); using it as
+  // a variable name here failed shader-module compilation, which silently
+  // broke every render() call once a recipe included an image.adjustColor
+  // step (any nonzero saturation or castStrength) -- see
+  // docs/tasks/TASK-fix-adjustcolor-wgsl-reserved-word.md.
+  let greyTarget = (mean.r + mean.g + mean.b) / 3.0;
+  let scale = 1.0 + castStrength * (greyTarget / max(mean, vec3f(CAST_MEAN_EPSILON)) - vec3f(1.0));
   let castCorrected = c.rgb * scale;
 
   let lab = rgbToLab(castCorrected);
