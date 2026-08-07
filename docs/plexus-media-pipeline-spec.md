@@ -115,7 +115,7 @@ This is the user-facing surface most people will actually judge the product by, 
 | Worker pool (built-in processors) | **Go** | CPU-bound (ffmpeg/libvips calls, compression), needs real concurrency and low memory overhead per worker — this is where Go actually earns its place, not just "for variety" |
 | Plugin contract | gRPC (protobuf) | Language-agnostic by design — a plugin author could write theirs in Python, Rust, whatever |
 | Realtime gateway | TypeScript (or Go if load justifies it) | SSE/WS fan-out to frontend clients |
-| Editor live preview | TypeScript + **WebGPU**, client-side | Must be instant on every slider drag; server round-trips can't hit that latency. Recipe is the only thing that ever leaves the browser during editing. Needs a lower-fidelity fallback for browsers without WebGPU support. |
+| Editor live preview | TypeScript + **WebGPU**, client-side | Must be instant on every slider drag; server round-trips can't hit that latency. Recipe is the only thing that ever leaves the browser during editing. Needs a lower-fidelity fallback for browsers without WebGPU support. Concrete implementation: `apps/web/src/lib/preview/` — dual WebGPU/WebGL2 renderers behind one `PreviewRenderer` interface, runtime capability detection, shared fit-geometry math (`docs/tasks/TASK-preview-renderer.md`). |
 | Final export / batch render | Go | Same recipe, executed server-side at full resolution for export and for applying to many files — one execution engine backs both the live preview (approximately) and the ground-truth output (exactly). |
 
 ## Requirements
