@@ -16,12 +16,19 @@ import (
 	"github.com/benitopedro13/plexus/workers/internal/processors"
 )
 
-// gradient.jpg is a small committed fixture — see
-// docs/tasks/TASK-builtin-processors.md.
-const fixtureJPEG = "../../testdata/images/gradient.jpg"
+// gradient.jpg / tiny.mp4 are small committed fixtures — see
+// docs/tasks/TASK-builtin-processors.md and
+// docs/tasks/TASK-video-audio-processors.md.
+const (
+	fixtureJPEG = "../../testdata/images/gradient.jpg"
+	fixtureMP4  = "../../testdata/media/tiny.mp4"
+)
 
 func TestMain(m *testing.M) {
 	if err := processors.Startup(); err != nil {
+		panic(err)
+	}
+	if err := processors.CheckAvailable(); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())
@@ -160,6 +167,38 @@ func TestHandle_RoundTrip(t *testing.T) {
 	if out.JobID != in.JobID || out.JobStepID != in.JobStepID {
 		t.Fatalf("result identifies wrong job/step: %+v", out)
 	}
+	if out.Status != dispatch.StepResultComplete {
+		t.Fatalf("expected status %q, got %q (error: %s)", dispatch.StepResultComplete, out.Status, out.Error)
+	}
+	if out.OutputRef == "" {
+		t.Fatal("expected a non-empty outputRef")
+	}
+	if _, err := os.Stat(out.OutputRef); err != nil {
+		t.Fatalf("expected outputRef %q to exist on disk: %v", out.OutputRef, err)
+	}
+}
+
+// TestHandle_VideoTranscode proves the dispatch/registry wiring reaches the
+// ffmpeg-backed processors the same way it reaches the govips-backed image
+// ones (TestHandle_RoundTrip above) — per-processor logic itself is covered
+// by the table tests in internal/processors, not duplicated here for all
+// four new ids.
+func TestHandle_VideoTranscode(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBroker(t, ctx)
+	t.Setenv("WORKER_STORAGE_DIR", t.TempDir())
+
+	in := dispatch.StepDispatchMessage{
+		JobID:     "job-4",
+		JobStepID: "step-4",
+		StepID:    "transcode",
+		Processor: "video.transcode",
+		Params:    map[string]interface{}{"format": "mp4"},
+		InputRef:  fixtureMP4,
+		Order:     0,
+	}
+	out := publishAndHandle(t, ctx, b, in)
+
 	if out.Status != dispatch.StepResultComplete {
 		t.Fatalf("expected status %q, got %q (error: %s)", dispatch.StepResultComplete, out.Status, out.Error)
 	}

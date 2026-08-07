@@ -7,7 +7,10 @@ import (
 )
 
 func TestLookup(t *testing.T) {
-	for _, id := range []string{"image.resize", "image.convert", "image.compress"} {
+	for _, id := range []string{
+		"image.resize", "image.convert", "image.compress",
+		"video.transcode", "video.compress", "audio.extract", "audio.convert",
+	} {
 		if _, ok := processors.Lookup(id); !ok {
 			t.Errorf("expected processor %q to be registered", id)
 		}

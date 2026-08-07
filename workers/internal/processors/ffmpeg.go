@@ -1,0 +1,106 @@
+package processors
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
+)
+
+// runFFmpeg runs the ffmpeg binary with args, always prepending flags that
+// keep it non-interactive and quiet on success: -nostdin (never block
+// waiting for a terminal), -hide_banner -loglevel error (only emit output on
+// failure), -y (overwrite outputPath() targets — jobStepID-named paths are
+// meant to be written exactly once per job, but re-running a failed step
+// must not fail on "file exists"). args are passed as separate argv
+// elements to exec.CommandContext, never concatenated into a shell string,
+// so there is no injection surface from inputRef/outputRef/param-derived
+// values.
+func runFFmpeg(ctx context.Context, args ...string) error {
+	full := append([]string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y"}, args...)
+
+	cmd := exec.CommandContext(ctx, "ffmpeg", full...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// CheckAvailable verifies the ffmpeg binary is on PATH. Called once at
+// worker startup (cmd/worker/main.go), not per-job — fail fast if it's
+// missing rather than surfacing it as a confusing first-job failure.
+func CheckAvailable() error {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return fmt.Errorf("ffmpeg not found on PATH: %w", err)
+	}
+	return nil
+}
+
+// videoCodecsForContainer maps a video container id to its fixed
+// video/audio codec pair — the pairs this slice's processors actually need
+// (spec P0: video transcode/compress), not ffmpeg's full encoder surface.
+// See docs/tasks/TASK-video-audio-processors.md "Porquê".
+func videoCodecsForContainer(container string) (vcodec, acodec string, ok bool) {
+	switch container {
+	case "mp4":
+		return "libx264", "aac", true
+	case "webm":
+		return "libvpx-vp9", "libopus", true
+	default:
+		return "", "", false
+	}
+}
+
+// audioCodecForFormat maps an audio format id to its ffmpeg encoder name.
+func audioCodecForFormat(format string) (codec string, ok bool) {
+	switch format {
+	case "mp3":
+		return "libmp3lame", true
+	case "aac":
+		return "aac", true
+	case "opus":
+		return "libopus", true
+	case "wav":
+		return "pcm_s16le", true
+	default:
+		return "", false
+	}
+}
+
+// videoCrfArgs returns the ffmpeg flags that set quality (1-100) as a
+// codec-specific CRF value. This is a documented linear-mapping judgment
+// call, same shape as pngCompressionFromQuality in format.go — x264 and VP9
+// use different CRF scales (0-51 vs 0-63), so there is no single formula.
+// See docs/tasks/TASK-video-audio-processors.md "Porquê".
+func videoCrfArgs(vcodec string, quality int) []string {
+	switch vcodec {
+	case "libx264":
+		crf := 51 - (quality*51)/100
+		if crf < 0 {
+			crf = 0
+		}
+		if crf > 51 {
+			crf = 51
+		}
+		return []string{"-crf", strconv.Itoa(crf)}
+	case "libvpx-vp9":
+		crf := 63 - (quality*63)/100
+		if crf < 0 {
+			crf = 0
+		}
+		if crf > 63 {
+			crf = 63
+		}
+		// -b:v 0 is required for libvpx-vp9 to honor -crf as true constant
+		// quality mode; without it the encoder ignores -crf and falls back
+		// to its default bitrate-target mode. See "Porquê" (V-3).
+		return []string{"-crf", strconv.Itoa(crf), "-b:v", "0"}
+	default:
+		return nil
+	}
+}

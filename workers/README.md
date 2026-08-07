@@ -29,6 +29,26 @@ runs built-in processors against the file at each step's `inputRef`. See
   `docs/90-deferred-register.md`) — whichever task adds either must install libvips
   there too.
 
+- **ffmpeg/ffprobe** — built-in video/audio processors (`video.transcode`,
+  `video.compress`, `audio.extract`, `audio.convert`) shell out to the `ffmpeg` binary via
+  `os/exec` (no cgo binding — see `docs/tasks/TASK-video-audio-processors.md`). `ffprobe`
+  is not required by the worker itself, only by its own tests. Without `ffmpeg` on `PATH`,
+  the worker fails fast at boot (`processors.CheckAvailable()`), not on the first job.
+
+  macOS (Homebrew):
+
+  ```sh
+  brew install ffmpeg
+  ```
+
+  Linux (Debian/Ubuntu):
+
+  ```sh
+  apt-get install ffmpeg
+  ```
+
+  Same `D-12` gap as libvips above — no CI/Dockerfile installs it yet.
+
 ## Env vars
 
 | Var | Default | Purpose |
@@ -50,5 +70,5 @@ go test ./...
 ```
 
 Tests run against real infrastructure (NATS via testcontainers — Docker required), per
-`CLAUDE.md`'s no-mocking-the-queue rule, and against small committed image fixtures in
-`testdata/images/` for the processors.
+`CLAUDE.md`'s no-mocking-the-queue rule, and against small committed fixtures in
+`testdata/images/` and `testdata/media/` for the processors.

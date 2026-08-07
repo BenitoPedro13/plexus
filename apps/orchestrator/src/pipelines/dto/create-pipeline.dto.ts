@@ -16,6 +16,10 @@ export const BUILTIN_PROCESSORS = [
   'image.resize',
   'image.convert',
   'image.compress',
+  'video.transcode',
+  'video.compress',
+  'audio.extract',
+  'audio.convert',
 ] as const;
 
 export type BuiltinProcessor = (typeof BUILTIN_PROCESSORS)[number];

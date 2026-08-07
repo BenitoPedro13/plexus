@@ -23,6 +23,10 @@ func main() {
 	}
 	defer processors.Shutdown()
 
+	if err := processors.CheckAvailable(); err != nil {
+		log.Fatalf("check ffmpeg: %v", err)
+	}
+
 	url := os.Getenv("NATS_URL")
 	if url == "" {
 		url = nats.DefaultURL

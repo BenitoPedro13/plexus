@@ -1,7 +1,9 @@
-// Package processors implements the Phase 1 built-in image processors
-// (image.resize, image.convert, image.compress) that
+// Package processors implements the Phase 1 built-in processors
+// (image.resize, image.convert, image.compress, video.transcode,
+// video.compress, audio.extract, audio.convert) that
 // workers/internal/dispatch/handler.go dispatches StepDispatchMessage.Processor
-// to. See docs/tasks/TASK-builtin-processors.md.
+// to. See docs/tasks/TASK-builtin-processors.md and
+// docs/tasks/TASK-video-audio-processors.md.
 package processors
 
 import "context"
@@ -15,9 +17,13 @@ import "context"
 type Func func(ctx context.Context, jobStepID, inputRef string, params map[string]interface{}) (outputRef string, err error)
 
 var registry = map[string]Func{
-	"image.resize":   Resize,
-	"image.convert":  Convert,
-	"image.compress": Compress,
+	"image.resize":    Resize,
+	"image.convert":   Convert,
+	"image.compress":  Compress,
+	"video.transcode": VideoTranscode,
+	"video.compress":  VideoCompress,
+	"audio.extract":   AudioExtract,
+	"audio.convert":   AudioConvert,
 }
 
 // Lookup returns the processor registered for name, if any.
