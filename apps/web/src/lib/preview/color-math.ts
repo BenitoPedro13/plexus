@@ -160,11 +160,30 @@ export function applyBlackAndWhite(pixel: RGBA, params: BlackAndWhiteParams): RG
 // below; the renderers run it as its own draw pass).
 //
 // Whether libvips' sharpen operates on the L channel of a Lab-like
-// colourspace only, or on RGB directly, is V-10
-// (docs/90-deferred-register.md) -- unverified. `colorSpace` defaults to
-// 'lab-l' (best available recollection of libvips' documented behavior,
-// not confirmed against primary source) so the renderers can switch to
-// 'rgb' with no redesign once V-10 resolves.
+// colourspace only, or on RGB directly, was V-10 (docs/90-deferred-register.md)
+// -- confirmed from libvips/libvips/convolution/sharpen.c: L channel only.
+// `colorSpace` defaults to 'lab-l'; 'rgb' remains as a non-production
+// fallback.
+//
+// libvips' response isn't a single unconditional slope -- it's piecewise
+// (sharpen.c): |diff| <= x1 (a "flat" area -- noise, smooth gradients) gets
+// slope m1=0, i.e. no sharpening at all; only |diff| > x1 (a real edge)
+// gets slope m2. The result is then clamped to [-y3, y2]. govips'
+// Sharpen(sigma, x1, m2) (image_pixel.go, v2.18.0) only sets Sigma/X1/M2 in
+// SharpenOptions -- M1/Y2/Y3 are left nil, so libvips' own C defaults apply:
+// m1=0, y2=10, y3=20 (L* units, per libvips' sharpen docs). Omitting this
+// coring gate was the root cause of the real-photo noise-amplification
+// symptom recorded against V-2: ordinary compression noise in flat regions
+// has small |diff| and should get zero response, not m2's full slope.
+const SHARPEN_X1 = 2
+const SHARPEN_Y2 = 10
+const SHARPEN_Y3 = 20
+
+function sharpenResponse(diff: number, m2: number, x1: number, y2: number, y3: number): number {
+  const slope = Math.abs(diff) <= x1 ? 0 : m2
+  return Math.min(y2, Math.max(-y3, slope * diff))
+}
+
 export function applyUnsharpMask(
   pixel: RGBA,
   blurredPixel: RGBA,
@@ -174,7 +193,11 @@ export function applyUnsharpMask(
   const m2 = 3 * intensity
 
   if (colorSpace === 'rgb') {
-    const sharpen = (original: number, blurred: number): number => clamp01(original + m2 * (original - blurred))
+    // Not the production path (V-10 confirmed libvips uses Lab L only) --
+    // same piecewise shape, x1/y2/y3 scaled from L* units (0..100) to this
+    // branch's 0..1 range for dimensional consistency.
+    const sharpen = (original: number, blurred: number): number =>
+      clamp01(original + sharpenResponse(original - blurred, m2, SHARPEN_X1 / 100, SHARPEN_Y2 / 100, SHARPEN_Y3 / 100))
     return {
       r: sharpen(pixel.r, blurredPixel.r),
       g: sharpen(pixel.g, blurredPixel.g),
@@ -185,7 +208,7 @@ export function applyUnsharpMask(
 
   const lab = rgbToLab(pixel.r, pixel.g, pixel.b)
   const blurredLab = rgbToLab(blurredPixel.r, blurredPixel.g, blurredPixel.b)
-  const sharpenedL = lab.l + m2 * (lab.l - blurredLab.l)
+  const sharpenedL = lab.l + sharpenResponse(lab.l - blurredLab.l, m2, SHARPEN_X1, SHARPEN_Y2, SHARPEN_Y3)
 
   const rgb = labToRgb({ l: sharpenedL, a: lab.a, b: lab.b })
   return { ...rgb, a: pixel.a }

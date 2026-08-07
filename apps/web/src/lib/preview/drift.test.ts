@@ -175,15 +175,16 @@ const COLOR_BOUNDS: DriftBounds = { mae: 0.25, max: 1.0, meanDeltaE: 0.2 }
 // meanDeltaE=0.221 (bw-skewed).
 const BW_BOUNDS: DriftBounds = { mae: 0.7, max: 1.3, meanDeltaE: 0.35 }
 
-// Sharpen: genuinely approximate -- the TS reference is a plain unsharp
-// mask (pixel + m2*(pixel-blurred)) while libvips' real vips_sharpen has
-// cored/threshold response (x1/y2/y3/m1 beyond the m2 slope TS
-// implements), so real per-pixel divergence at hard edges is expected, not
-// a bug. Worst observed mae=0.637, max=87.76 (!), meanDeltaE=0.187
-// (sharpen-1.0, checkerboard region). max is intentionally loose --
-// bounding it tightly would just be re-asserting a known, accepted
-// approximation gap; mae still catches a regression in the overall image.
-const SHARPEN_BOUNDS: DriftBounds = { mae: 1.0, max: 110, meanDeltaE: 0.3 }
+// Sharpen: TASK-sharpen-coring-fix.md added libvips' piecewise flat/jaggy
+// coring (x1/y2/y3/m1, confirmed via govips' SharpenOptions leaving those
+// three unset -- libvips' own C defaults apply) to color-math.ts's
+// applyUnsharpMask, closing most of the previous plain-linear-response gap.
+// Worst observed post-fix: mae=0.354, max=38.0, meanDeltaE=0.103
+// (sharpen-1.0, checkerboard region) -- was mae=0.637, max=87.76,
+// meanDeltaE=0.187 before the fix. Bounds set ~1.4-1.6x above the observed
+// worst point, matching this file's convention for the other three
+// controls.
+const SHARPEN_BOUNDS: DriftBounds = { mae: 0.55, max: 50, meanDeltaE: 0.17 }
 
 function assertWithinBounds(drift: DriftResult, bounds: DriftBounds): void {
   const mae = Math.max(drift.maeR, drift.maeG, drift.maeB)

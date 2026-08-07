@@ -102,6 +102,33 @@ describe('applyUnsharpMask', () => {
     const result = applyUnsharpMask(GRAY, blurred, 1, 'rgb')
     expect(result.r).toBeGreaterThan(GRAY.r)
   })
+
+  it('exaggerates the difference from the blurred pixel when intensity > 0 (lab-l mode, above the x1 coring threshold)', () => {
+    const blurred: RGBA = { r: 0.3, g: 0.3, b: 0.3, a: 1 }
+    const result = applyUnsharpMask(GRAY, blurred, 1)
+    expect(result.r).toBeGreaterThan(GRAY.r)
+  })
+
+  it('coring gate: a tiny blur difference (|diff| <= x1=2 L* units) leaves the pixel unchanged even at full intensity', () => {
+    // GRAY vs a barely-brighter blur -- L* difference is well under the x1=2
+    // flat/jaggy threshold (root cause of the real-photo noise-amplification
+    // symptom recorded against V-2: compression noise has exactly this shape).
+    const blurred: RGBA = { r: 0.505, g: 0.505, b: 0.505, a: 1 }
+    const result = applyUnsharpMask(GRAY, blurred, 1)
+    expect(result.r).toBeCloseTo(GRAY.r, 2)
+    expect(result.g).toBeCloseTo(GRAY.g, 2)
+    expect(result.b).toBeCloseTo(GRAY.b, 2)
+  })
+
+  it('clamps the response at the y2/y3 bound instead of diverging for very large differences', () => {
+    const veryDark: RGBA = { r: 0.02, g: 0.02, b: 0.02, a: 1 }
+    const pitchBlack: RGBA = { r: 0, g: 0, b: 0, a: 1 }
+    // Both differences from GRAY already exceed the y2=10 L*-unit clamp at
+    // m2=3*intensity=3, so a bigger difference must not sharpen further.
+    const resultA = applyUnsharpMask(GRAY, veryDark, 1)
+    const resultB = applyUnsharpMask(GRAY, pitchBlack, 1)
+    expect(resultA.r).toBeCloseTo(resultB.r, 2)
+  })
 })
 
 describe('gaussianKernel1D', () => {

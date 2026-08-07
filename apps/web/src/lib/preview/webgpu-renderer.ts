@@ -264,10 +264,21 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
 // Unsharp-mask composite: reads the pre-blur ("original") and blurred
 // textures, sharpens the Lab L channel only (V-10, color-math.ts's
 // applyUnsharpMask default). `params.x` = intensity.
+//
+// Piecewise flat/jaggy response, mirrors color-math.ts's sharpenResponse:
+// x1=2 (flat/jaggy threshold), y2=10 (max brighten), y3=20 (max darken),
+// m1=0 -- libvips' own defaults for the SharpenOptions fields govips'
+// Sharpen(sigma, x1, m2) leaves unset (image_pixel.go, v2.18.0). |diff| <=
+// x1 gets zero response (flat/noise areas); only real edges (|diff| > x1)
+// get slope m2.
 const UNSHARP_WGSL =
   CONTENT_VERTEX_BLOCK +
   LAB_HELPERS_BLOCK +
   /* wgsl */ `
+const SHARPEN_X1: f32 = 2.0;
+const SHARPEN_Y2: f32 = 10.0;
+const SHARPEN_Y3: f32 = 20.0;
+
 @group(0) @binding(0) var<uniform> params: vec4f;
 @group(0) @binding(1) var quadSampler: sampler;
 @group(0) @binding(2) var originalTexture: texture_2d<f32>;
@@ -280,7 +291,10 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
   let m2 = 3.0 * params.x;
   let origLab = rgbToLab(orig.rgb);
   let blurredLab = rgbToLab(blurred.rgb);
-  let sharpenedL = origLab.x + m2 * (origLab.x - blurredLab.x);
+  let diff = origLab.x - blurredLab.x;
+  let slope = select(0.0, m2, abs(diff) > SHARPEN_X1);
+  let y = clamp(slope * diff, -SHARPEN_Y3, SHARPEN_Y2);
+  let sharpenedL = origLab.x + y;
   return vec4f(labToRgb(vec3f(sharpenedL, origLab.y, origLab.z)), orig.a);
 }
 `
