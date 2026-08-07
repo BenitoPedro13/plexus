@@ -1,0 +1,38 @@
+# Userflow: presign an upload URL, PUT a real fixture file to it, then presign
+# a download URL for the same object and confirm both round-trip.
+# Precondition: pnpm dev running (orchestrator + MinIO reachable at MINIO_ENDPOINT).
+# Run: cd apps/orchestrator && pnpm test:http
+#  or: httpyac send test/http/upload-presign-flow.http --all
+
+@ORCHESTRATOR_URL = http://localhost:3000
+
+# @name presign
+POST {{ORCHESTRATOR_URL}}/uploads/presign
+Content-Type: application/json
+
+{
+  "filename": "gradient.jpg",
+  "contentType": "image/jpeg"
+}
+
+?? status == 201
+?? js response.parsedBody.objectKey != null
+?? js response.parsedBody.uploadUrl != null
+
+###
+
+# @ref presign
+PUT {{presign.uploadUrl}}
+Content-Type: image/jpeg
+
+< ../../../../workers/testdata/images/gradient.jpg
+
+?? status == 200
+
+###
+
+# @ref presign
+GET {{ORCHESTRATOR_URL}}/uploads/presign-download?key={{presign.objectKey}}
+
+?? status == 200
+?? js response.parsedBody.downloadUrl != null

@@ -1,0 +1,27 @@
+# Userflow: render a single image against a one-step recipe through the
+# synchronous editor-export path — bypasses pipelines/jobs entirely, see
+# apps/orchestrator/src/export/export.controller.ts's header comment.
+# Precondition: this is the one flow `pnpm dev` does NOT start for you —
+# RENDER_SERVER_URL (default http://localhost:8090) must be running separately:
+#   cd workers && go run ./cmd/renderserver
+# Without it this correctly fails with 502 ("render server unreachable").
+# Run: cd apps/orchestrator && pnpm test:http
+#  or: httpyac send test/http/export-flow.http --all
+
+@ORCHESTRATOR_URL = http://localhost:3000
+
+POST {{ORCHESTRATOR_URL}}/export
+Content-Type: multipart/form-data; boundary=PlexusExportBoundary
+
+--PlexusExportBoundary
+Content-Disposition: form-data; name="file"; filename="gradient.jpg"
+Content-Type: image/jpeg
+
+< ../../../../workers/testdata/images/gradient.jpg
+--PlexusExportBoundary
+Content-Disposition: form-data; name="recipe"
+
+[{"processor":"image.resize","params":{"width":320,"height":240}}]
+--PlexusExportBoundary--
+
+?? status == 200

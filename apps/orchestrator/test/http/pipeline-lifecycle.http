@@ -1,0 +1,33 @@
+# Userflow: create a pipeline, then fetch it back by id.
+# Precondition: orchestrator running (`pnpm dev`, or `cd apps/orchestrator && pnpm start:dev`)
+#   with Postgres reachable — this flow never touches NATS/MinIO/a worker.
+# Run: cd apps/orchestrator && pnpm test:http
+#  or: httpyac send test/http/pipeline-lifecycle.http --all
+
+@ORCHESTRATOR_URL = http://localhost:3000
+
+# @name pipeline
+POST {{ORCHESTRATOR_URL}}/pipelines
+Content-Type: application/json
+
+{
+  "name": "pipeline-lifecycle-smoke",
+  "steps": [
+    { "id": "root", "processor": "image.resize", "params": { "width": 800, "height": 600 } },
+    { "id": "convert", "processor": "image.convert", "params": { "format": "webp" }, "dependsOn": ["root"] }
+  ]
+}
+
+?? status == 201
+?? js response.parsedBody.name == pipeline-lifecycle-smoke
+?? js response.parsedBody.definition.length == 2
+
+###
+
+# @ref pipeline
+GET {{ORCHESTRATOR_URL}}/pipelines/{{pipeline.id}}
+
+?? status == 200
+?? js response.parsedBody.id == {{pipeline.id}}
+?? js response.parsedBody.definition[0].id == root
+?? js response.parsedBody.definition[1].dependsOn[0] == root

@@ -1,0 +1,97 @@
+# Userflow: a branching pipeline (root -> two independent children) dispatched
+# as one job, watched over SSE, confirming both branches actually ran and the
+# job settles into a terminal status. See docs/tasks/TASK-branching-parallel-dags.md
+# for the dispatch semantics this exercises at the HTTP level (the Jest suite
+# already covers this in depth — this file is the readable, manual companion).
+# Precondition: full `pnpm dev` stack (orchestrator + Go worker + MinIO).
+# Run: cd apps/orchestrator && pnpm test:http
+#  or: httpyac send test/http/dag-fan-out.http --all
+
+@ORCHESTRATOR_URL = http://localhost:3000
+
+# @name presign
+POST {{ORCHESTRATOR_URL}}/uploads/presign
+Content-Type: application/json
+
+{
+  "filename": "gradient.jpg",
+  "contentType": "image/jpeg"
+}
+
+?? status == 201
+
+###
+
+# @ref presign
+PUT {{presign.uploadUrl}}
+Content-Type: image/jpeg
+
+< ../../../../workers/testdata/images/gradient.jpg
+
+?? status == 200
+
+###
+
+# @name pipeline
+POST {{ORCHESTRATOR_URL}}/pipelines
+Content-Type: application/json
+
+{
+  "name": "dag-fan-out-smoke",
+  "steps": [
+    { "id": "root", "processor": "image.resize", "params": { "width": 800, "height": 600 } },
+    { "id": "a", "processor": "image.compress", "params": { "quality": 80 }, "dependsOn": ["root"] },
+    { "id": "b", "processor": "image.convert", "params": { "format": "webp" }, "dependsOn": ["root"] }
+  ]
+}
+
+?? status == 201
+?? js response.parsedBody.definition.length == 3
+
+###
+
+# Stacked @ref is confirmed working (verified live in job-single-flow.http).
+# @name job
+# @ref presign
+# @ref pipeline
+POST {{ORCHESTRATOR_URL}}/jobs
+Content-Type: application/json
+
+{
+  "pipelineId": "{{pipeline.id}}",
+  "inputRef": "{{presign.objectKey}}"
+}
+
+?? status == 201
+
+###
+
+# Watch-and-print only, see design note in
+# docs/tasks/TASK-orchestrator-http-userflow-tests.md. Disabled by default —
+# same reason as job-single-flow.http: the EventSource client's auto-reconnect
+# after the stream closes gets 400s, which would trip --bail. Delete
+# @disabled to watch it by hand.
+# @disabled
+# @ref job
+SSE {{ORCHESTRATOR_URL}}/jobs/{{job.id}}/events
+Event: message
+
+{{@streaming
+  async function waitForJob(){
+    await sleep(8000);
+  }
+  exports.waitPromise = waitForJob();
+}}
+
+###
+
+# Deterministic wait for both branches to finish, instead of relying on the
+# (disabled, unreliable) SSE step above.
+# @sleep 5000
+# @ref job
+GET {{ORCHESTRATOR_URL}}/jobs/{{job.id}}
+
+?? status == 200
+?? js response.parsedBody.status == COMPLETE
+?? js response.parsedBody.steps.length == 3
+?? js response.parsedBody.steps.map(s => s.stepId).sort().join(",") == a,b,root

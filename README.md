@@ -176,6 +176,16 @@ cd workers && go test ./...
 cd apps/web && pnpm test
 ```
 
+A separate, manual/local companion layer covers the orchestrator's full HTTP surface as
+readable, git-committed userflow files (`apps/orchestrator/test/http/*.http`, run via
+[httpyac](https://httpyac.github.io)) — create-a-pipeline, run-a-job-and-watch-SSE,
+branching-DAG dispatch, and so on. It requires a running `pnpm dev` stack and is not part
+of CI; the testcontainer suite above remains the correctness authority.
+
+```sh
+cd apps/orchestrator && pnpm test:http
+```
+
 ## License
 
 [MIT](LICENSE)

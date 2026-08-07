@@ -57,6 +57,16 @@ pnpm test:cov     # with coverage
 (Docker required) — mocking the database or the queue is banned in this app's domain logic,
 per the repo root [`CLAUDE.md`](../../CLAUDE.md).
 
+```sh
+pnpm test:http    # readable userflow files against a running dev stack
+```
+
+`test/http/*.http` are [httpyac](https://httpyac.github.io) request files — one per
+userflow (create-a-pipeline, single-job-with-SSE, batch, branching DAG, the fan-in negative
+case, editor export). Manual/local companion to the specs above, not CI-gating: requires
+`pnpm dev` running (plus `workers/cmd/renderserver` separately for `export-flow.http`, see
+that file's header comment).
+
 ## Migrations
 
 ```sh

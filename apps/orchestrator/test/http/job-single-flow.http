@@ -1,0 +1,101 @@
+# Userflow: upload a real fixture, create a one-step pipeline, start a job
+# against the uploaded file, watch progress over SSE, then confirm COMPLETE.
+# Precondition: full `pnpm dev` stack (orchestrator + Go worker actually
+# consuming NATS dispatch messages + MinIO) — this is the one flow that needs
+# the whole pipeline to run for real, not just the orchestrator + Postgres.
+# Run: cd apps/orchestrator && pnpm test:http
+#  or: httpyac send test/http/job-single-flow.http --all
+
+@ORCHESTRATOR_URL = http://localhost:3000
+
+# @name presign
+POST {{ORCHESTRATOR_URL}}/uploads/presign
+Content-Type: application/json
+
+{
+  "filename": "gradient.jpg",
+  "contentType": "image/jpeg"
+}
+
+?? status == 201
+
+###
+
+# @ref presign
+PUT {{presign.uploadUrl}}
+Content-Type: image/jpeg
+
+< ../../../../workers/testdata/images/gradient.jpg
+
+?? status == 200
+
+###
+
+# @name pipeline
+POST {{ORCHESTRATOR_URL}}/pipelines
+Content-Type: application/json
+
+{
+  "name": "job-single-flow-smoke",
+  "steps": [
+    { "id": "root", "processor": "image.resize", "params": { "width": 640, "height": 480 } }
+  ]
+}
+
+?? status == 201
+
+###
+
+# Stacking two @ref lines on one request is confirmed working (verified live
+# against a running orchestrator — both `presign` and `pipeline` resolve).
+# @name job
+# @ref presign
+# @ref pipeline
+POST {{ORCHESTRATOR_URL}}/jobs
+Content-Type: application/json
+
+{
+  "pipelineId": "{{pipeline.id}}",
+  "inputRef": "{{presign.objectKey}}"
+}
+
+?? status == 201
+# No assertion on parsedBody.status here: JobsService.create() calls
+# dispatchNext() *before* returning, so by the time this response arrives the
+# worker may already have moved the job past QUEUED into RUNNING or even
+# COMPLETE for a fixture this small — confirmed live, asserting QUEUED here
+# is flaky. The terminal-state assertion below is the real check.
+
+###
+
+# Watch-and-print only — httpyac's documented SSE hook waits a fixed duration
+# rather than inspecting individual frames (see design note in
+# docs/tasks/TASK-orchestrator-http-userflow-tests.md). The real pass/fail
+# assertion is the request below, not this one. Disabled by default:
+# confirmed live that once the job is already terminal by the time this
+# connects (typical for these tiny fixtures), the EventSource client
+# auto-reconnects after the server closes the stream and gets 400s, which
+# httpyac counts as a failed request and would trip --bail in
+# `pnpm test:http`. Delete the @disabled line below to watch it by hand.
+# @disabled
+# @ref job
+SSE {{ORCHESTRATOR_URL}}/jobs/{{job.id}}/events
+Event: message
+
+{{@streaming
+  async function waitForJob(){
+    await sleep(8000);
+  }
+  exports.waitPromise = waitForJob();
+}}
+
+###
+
+# Deterministic wait for the worker to finish, instead of relying on the
+# (disabled, unreliable) SSE step above.
+# @sleep 5000
+# @ref job
+GET {{ORCHESTRATOR_URL}}/jobs/{{job.id}}
+
+?? status == 200
+?? js response.parsedBody.status == COMPLETE

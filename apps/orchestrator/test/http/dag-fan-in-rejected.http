@@ -1,0 +1,26 @@
+# Userflow (negative case): a pipeline step declaring more than one dependsOn
+# entry (fan-in) must be rejected — fan-in is explicitly unsupported per
+# docs/90-deferred-register.md D-47. Confirms the DAG validator's HTTP-level
+# error shape (PipelinesController catches DagValidationError and reshapes it
+# into a 400 with {reason, message}), not just its internal exception type.
+# Precondition: orchestrator running (`pnpm dev`, or `pnpm start:dev`) — Postgres
+# only, no worker/NATS/MinIO needed since this pipeline is never dispatched.
+# Run: cd apps/orchestrator && pnpm test:http
+#  or: httpyac send test/http/dag-fan-in-rejected.http --all
+
+@ORCHESTRATOR_URL = http://localhost:3000
+
+POST {{ORCHESTRATOR_URL}}/pipelines
+Content-Type: application/json
+
+{
+  "name": "dag-fan-in-rejected-smoke",
+  "steps": [
+    { "id": "a", "processor": "image.resize", "params": { "width": 640, "height": 480 }, "dependsOn": [] },
+    { "id": "b", "processor": "image.compress", "params": { "quality": 80 }, "dependsOn": [] },
+    { "id": "c", "processor": "image.convert", "params": { "format": "webp" }, "dependsOn": ["a", "b"] }
+  ]
+}
+
+?? status == 400
+?? js response.parsedBody.reason == FAN_IN_NOT_SUPPORTED

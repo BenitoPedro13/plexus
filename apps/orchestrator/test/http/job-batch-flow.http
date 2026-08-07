@@ -1,0 +1,123 @@
+# Userflow: presign 2 uploads, upload both, create one pipeline, batch-create a
+# job per file in one call, and confirm each job reaches a terminal status.
+# Precondition: full `pnpm dev` stack (orchestrator + Go worker + MinIO).
+# Run: cd apps/orchestrator && pnpm test:http
+#  or: httpyac send test/http/job-batch-flow.http --all
+
+@ORCHESTRATOR_URL = http://localhost:3000
+
+# @name presignA
+POST {{ORCHESTRATOR_URL}}/uploads/presign
+Content-Type: application/json
+
+{
+  "filename": "gradient.jpg",
+  "contentType": "image/jpeg"
+}
+
+?? status == 201
+
+###
+
+# @ref presignA
+PUT {{presignA.uploadUrl}}
+Content-Type: image/jpeg
+
+< ../../../../workers/testdata/images/gradient.jpg
+
+?? status == 200
+
+###
+
+# @name presignB
+POST {{ORCHESTRATOR_URL}}/uploads/presign
+Content-Type: application/json
+
+{
+  "filename": "gradient.png",
+  "contentType": "image/png"
+}
+
+?? status == 201
+
+###
+
+# @ref presignB
+PUT {{presignB.uploadUrl}}
+Content-Type: image/png
+
+< ../../../../workers/testdata/images/gradient.png
+
+?? status == 200
+
+###
+
+# @name pipeline
+POST {{ORCHESTRATOR_URL}}/pipelines
+Content-Type: application/json
+
+{
+  "name": "job-batch-flow-smoke",
+  "steps": [
+    { "id": "root", "processor": "image.compress", "params": { "quality": 75 } }
+  ]
+}
+
+?? status == 201
+
+###
+
+# Stacking three @ref lines on one request is confirmed working (verified
+# live — presignA, presignB, and pipeline all resolve).
+# @name batch
+# @ref presignA
+# @ref presignB
+# @ref pipeline
+POST {{ORCHESTRATOR_URL}}/jobs/batch
+Content-Type: application/json
+
+{
+  "pipelineId": "{{pipeline.id}}",
+  "inputRefs": ["{{presignA.objectKey}}", "{{presignB.objectKey}}"]
+}
+
+?? status == 201
+?? js response.parsedBody.length == 2
+
+###
+
+# Watch-and-print only, see design note in
+# docs/tasks/TASK-orchestrator-http-userflow-tests.md. Disabled by default —
+# same reason as job-single-flow.http: once the job is already terminal by
+# the time this connects, the EventSource client's auto-reconnect gets 400s,
+# which would trip --bail. Delete @disabled to watch it by hand.
+# @disabled
+# @ref batch
+SSE {{ORCHESTRATOR_URL}}/jobs/{{batch[0].id}}/events
+Event: message
+
+{{@streaming
+  async function waitForJob(){
+    await sleep(8000);
+  }
+  exports.waitPromise = waitForJob();
+}}
+
+###
+
+# Deterministic wait for the worker to finish both jobs, instead of relying
+# on the (disabled, unreliable) SSE step above.
+# @sleep 5000
+# @ref batch
+GET {{ORCHESTRATOR_URL}}/jobs/{{batch[0].id}}
+
+?? status == 200
+?? js response.parsedBody.status == COMPLETE
+
+###
+
+# @ref batch
+GET {{ORCHESTRATOR_URL}}/jobs/{{batch[1].id}}
+
+?? status == 200
+?? js response.parsedBody.status == COMPLETE
