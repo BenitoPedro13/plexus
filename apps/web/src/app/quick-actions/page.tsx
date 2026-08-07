@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Dropzone } from '@/components/Dropzone'
 import { Button } from '@/components/ui/button'
 import { createJob, createPipelineFromRecipe, uploadFile } from '@/lib/editor/batch'
+import { recordRecentJob } from '@/lib/jobs/recentJobs'
 import { takePendingFile } from '@/lib/pending-file'
 import { detectKind, presetsFor, type QuickActionKind } from '@/lib/quick-actions/presets'
 
@@ -79,6 +80,12 @@ export default function QuickActionsPage() {
         `${preset.label} -- ${file.name}`,
       )
       const job = await createJob(pipeline.id, inputRef)
+      recordRecentJob({
+        jobId: job.id,
+        pipelineId: pipeline.id,
+        label: `${preset.label} -- ${file.name}`,
+        createdAt: new Date().toISOString(),
+      })
       router.push(`/quick-actions/${job.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -102,6 +109,12 @@ export default function QuickActionsPage() {
         <span className="font-mono text-[11px] tracking-[0.08em] text-foreground uppercase">
           Quick Actions
         </span>
+        <Link
+          href="/jobs"
+          className="ml-auto font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase hover:text-foreground"
+        >
+          Jobs
+        </Link>
       </header>
 
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-10">

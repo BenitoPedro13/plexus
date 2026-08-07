@@ -14,6 +14,7 @@ adjustment writes recipe parameters; nothing is ever applied to pixels until exp
 | `/batch/[pipelineId]` | Progress/download view for a batch job created by the editor's Apply to Batch flow |
 | `/quick-actions` | Video/audio counterpart to the editor — drop/select a video or audio file, run one named preset (shrink, convert format, extract audio), no raw parameter controls |
 | `/quick-actions/[jobId]` | Progress/download view for a single job created by `/quick-actions` |
+| `/jobs` | Per-browser list of jobs started from `/quick-actions` (tracked client-side in `localStorage` — no server-side job list exists), live status via SSE |
 | `/preview-demo` | Renderer smoke-test harness — raw per-parameter controls against the `PreviewRenderer` (WebGPU/WebGL2) directly, not the curated editor UI |
 
 ## Live preview

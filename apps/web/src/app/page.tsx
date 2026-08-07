@@ -62,6 +62,12 @@ export default function Home() {
         <span className="font-mono text-[11px] tracking-[0.08em] text-foreground uppercase">
           Plexus
         </span>
+        <Link
+          href="/jobs"
+          className="ml-auto font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase hover:text-foreground"
+        >
+          Jobs
+        </Link>
       </header>
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center gap-8 px-4 py-12">
