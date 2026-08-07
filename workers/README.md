@@ -25,9 +25,8 @@ runs built-in processors against the file at each step's `inputRef`. See
   apt-get install libvips-dev pkg-config
   ```
 
-  No CI workflow or worker `Dockerfile` exists yet (`D-12` in
-  `docs/90-deferred-register.md`) — whichever task adds either must install libvips
-  there too.
+  Installed in CI and in the worker image — see `../.github/workflows/ci.yml` and
+  `Dockerfile`.
 
 - **ffmpeg/ffprobe** — built-in video/audio processors (`video.transcode`,
   `video.compress`, `audio.extract`, `audio.convert`) shell out to the `ffmpeg` binary via
@@ -47,7 +46,8 @@ runs built-in processors against the file at each step's `inputRef`. See
   apt-get install ffmpeg
   ```
 
-  Same `D-12` gap as libvips above — no CI/Dockerfile installs it yet.
+  Installed in CI and in the worker image — see `../.github/workflows/ci.yml` and
+  `Dockerfile`.
 
 ## Env vars
 
