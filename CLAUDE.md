@@ -318,17 +318,17 @@ metrics exist to catch.
 
 ## 4. Project conventions — polyglot monorepo
 
-**Rule:** One repo, two toolchains, clean boundary. `apps/orchestrator` and `workers/` are
-scaffolded (`TASK-scaffold-monorepo.md`, Phase 1). `apps/web`, `proto/`, and `packages/`
-remain proposed but deliberately not yet created — each is scaffolded in its own phase's
-task doc when that phase actually starts (tracked as `D-1` in
-`docs/90-deferred-register.md`), not up front, per §2.0 (framework versions drift while
-unused).
+**Rule:** One repo, two toolchains, clean boundary. `apps/orchestrator`, `workers/`, and
+`apps/web` are scaffolded (`TASK-scaffold-monorepo.md` Phase 1; `apps/web` via
+`TASK-editor-scaffold.md`, Phase 2 start). `proto/` and `packages/` remain proposed but
+deliberately not yet created — each is scaffolded in its own phase's task doc when that
+phase actually starts (tracked as `D-1` in `docs/90-deferred-register.md`), not up front,
+per §2.0 (framework versions drift while unused).
 
 - **Layout (current + proposed):**
 
   ```
-  apps/web            Next.js frontend + WebGPU editor (TypeScript)      — proposed, Phase 2
+  apps/web            Next.js 16.3 frontend, WebGPU editor to come (TS)   — scaffolded
   apps/orchestrator   NestJS — auth, DAG resolution, job state machine   — scaffolded
   workers/            Go worker pool — built-in processors, export/batch — scaffolded
   proto/              gRPC/protobuf contracts (plugin contract)          — proposed, Phase 4
@@ -376,7 +376,7 @@ no-co-author rule is a standing preference, not situational.
 
 | Phase | Rule | Output |
 |-------|------|--------|
-| **Stack** | Next.js + WebGPU editor, NestJS orchestrator, Go workers (ffmpeg/libvips), gRPC plugins, NATS JetStream, Postgres, MinIO/S3 (spec-decided; `apps/orchestrator` + `workers/` scaffolded, rest phased in) | Polyglot monorepo: `apps/web` (proposed), `apps/orchestrator` (scaffolded), `workers/` (scaffolded), `proto/` (proposed), `packages/` (proposed) |
+| **Stack** | Next.js + WebGPU editor, NestJS orchestrator, Go workers (ffmpeg/libvips), gRPC plugins, NATS JetStream, Postgres, MinIO/S3 (spec-decided; `apps/orchestrator` + `workers/` + `apps/web` scaffolded, rest phased in) | Polyglot monorepo: `apps/web` (scaffolded), `apps/orchestrator` (scaffolded), `workers/` (scaffolded), `proto/` (proposed), `packages/` (proposed) |
 | **Before** | Write a task document first — including for the initial scaffold | `docs/tasks/TASK-<slug>.md` with: current scenario, planned changes (file by file), why, affected-files table |
 | **During** | Use CLIs / generators / SDKs — ffmpeg/libvips for media, `buf`/protoc for gRPC stubs, framework CLIs for scaffolds; never hand-rolled media processing or hand-synced contracts | Canonical, reproducible output; `[VERIFY: ...]` inline for anything unconfirmed |
 | **After** | Update all affected documentation, including the deferred register; then commit — auto-committed once verified, never with a `Co-Authored-By` trailer (§4.1) | `CLAUDE.md`, `docs/plexus-media-pipeline-spec.md`, `docs/90-deferred-register.md` (`V-xx`/`D-xx`), regenerated proto stubs, `.env.example`, a commit |
