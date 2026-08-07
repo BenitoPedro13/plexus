@@ -11,6 +11,7 @@ import {
   rgbToLab,
   type RGBA,
 } from './color-math'
+import { computeFitGeometry, type FitGeometry } from './geometry'
 
 // Measures V-2 (docs/90-deferred-register.md): drift between color-math.ts's
 // pure-TS reference math -- the source both webgpu-renderer.ts and
@@ -148,6 +149,71 @@ function gaussianBlur(raster: Raster, sigma: number, radius: number): RGBA[] {
   return vertical
 }
 
+// Reproduces the *final blit* pass both renderers run for image.resize --
+// BLIT_VERTEX_SHADER_SOURCE/BLIT_FRAGMENT_SHADER_SOURCE in
+// webgl2-renderer.ts (and the WebGPU equivalent): each output pixel's local
+// UV (x+0.5)/outW, (y+0.5)/outH is mixed into computeFitGeometry()'s
+// sourceUV rect, then bilinear-sampled from the source texture with
+// clamp-to-edge addressing (gl.CLAMP_TO_EDGE, explicit in
+// webgl2-renderer.ts; WebGPU's createSampler sets no addressMode, resting
+// on the spec default of "clamp-to-edge" -- V-6 flags this as still
+// unverified against the spec text directly). Test-local like gaussianBlur
+// above -- neither renderer exposes "resample once, return pixels" as a
+// unit, they render straight to a canvas.
+function bilinearResample(source: Raster, geometry: FitGeometry): Raster {
+  const outWidth = Math.max(1, Math.round(geometry.outputWidth))
+  const outHeight = Math.max(1, Math.round(geometry.outputHeight))
+  const { u0, v0, u1, v1 } = geometry.sourceUV
+  const pixels: RGBA[] = new Array(outWidth * outHeight)
+
+  for (let y = 0; y < outHeight; y++) {
+    for (let x = 0; x < outWidth; x++) {
+      const localU = (x + 0.5) / outWidth
+      const localV = (y + 0.5) / outHeight
+      const u = u0 + (u1 - u0) * localU
+      const v = v0 + (v1 - v0) * localV
+      pixels[y * outWidth + x] = sampleBilinearClamped(source, u, v)
+    }
+  }
+
+  return { width: outWidth, height: outHeight, pixels }
+}
+
+// Half-texel-centered UV -> texel mapping, matching GPU hardware texture
+// samplers (texel (0,0)'s center sits at UV (0.5/width, 0.5/height)).
+function sampleBilinearClamped(source: Raster, u: number, v: number): RGBA {
+  const sx = u * source.width - 0.5
+  const sy = v * source.height - 0.5
+  const x0 = Math.floor(sx)
+  const y0 = Math.floor(sy)
+  const fx = sx - x0
+  const fy = sy - y0
+
+  const p00 = getClamped(source, x0, y0)
+  const p10 = getClamped(source, x0 + 1, y0)
+  const p01 = getClamped(source, x0, y0 + 1)
+  const p11 = getClamped(source, x0 + 1, y0 + 1)
+
+  return {
+    r: lerp2D(p00.r, p10.r, p01.r, p11.r, fx, fy),
+    g: lerp2D(p00.g, p10.g, p01.g, p11.g, fx, fy),
+    b: lerp2D(p00.b, p10.b, p01.b, p11.b, fx, fy),
+    a: lerp2D(p00.a, p10.a, p01.a, p11.a, fx, fy),
+  }
+}
+
+function getClamped(source: Raster, x: number, y: number): RGBA {
+  const cx = Math.min(source.width - 1, Math.max(0, x))
+  const cy = Math.min(source.height - 1, Math.max(0, y))
+  return source.pixels[cy * source.width + cx]
+}
+
+function lerp2D(v00: number, v10: number, v01: number, v11: number, fx: number, fy: number): number {
+  const top = v00 + (v10 - v00) * fx
+  const bottom = v01 + (v11 - v01) * fx
+  return top + (bottom - top) * fy
+}
+
 // Bounds below are set from a real measured run against
 // testdata/drift/golden/ (see the inline worst-observed numbers in each
 // comment), not chosen ahead of the measurement -- CLAUDE.md §0 requires a
@@ -185,6 +251,22 @@ const BW_BOUNDS: DriftBounds = { mae: 0.7, max: 1.3, meanDeltaE: 0.35 }
 // worst point, matching this file's convention for the other three
 // controls.
 const SHARPEN_BOUNDS: DriftBounds = { mae: 0.55, max: 50, meanDeltaE: 0.17 }
+
+// V-6 (docs/90-deferred-register.md): confirmed against libvips' own source
+// that Go's image.resize (govips Thumbnail -> vips_thumbnail_image) resamples
+// with Lanczos3 (libvips/resample/resize.c's vips_resize_class_init default),
+// while the live preview resamples with hardware bilinear -- a genuinely
+// different algorithm, not a rounding-mode gap. Measured drift confirms it:
+// an order of magnitude worse than the near-bit-exact composite controls
+// above. Worst observed (resize-inside-upscale, 1.5x upscale -- Lanczos3's
+// ringing/overshoot vs. bilinear's plain blur is most visible with no
+// downscale-antialiasing question in the way): mae=7.92, max=99.25,
+// meanDeltaE=3.70. Other points: resize-inside-half mae=4.41/max=33.0/
+// meanDeltaE=2.18, resize-cover-crop mae=2.48/max=34.0/meanDeltaE=1.59.
+// Bounds set ~1.3-1.5x above the worst point, matching this file's
+// convention -- this is an *accepted* large gap (see new D-23 in
+// docs/90-deferred-register.md), not a bug being tracked down.
+const RESIZE_BOUNDS: DriftBounds = { mae: 11.0, max: 130, meanDeltaE: 5.0 }
 
 function assertWithinBounds(drift: DriftResult, bounds: DriftBounds): void {
   const mae = Math.max(drift.maeR, drift.maeG, drift.maeB)
@@ -243,5 +325,23 @@ describe('recipe fidelity drift (V-2)', () => {
     const golden = readRaster(join(FIXTURES_DIR, 'golden', `${name}.rgba`)).pixels
     const drift = measureDrift(actual, golden)
     assertWithinBounds(drift, SHARPEN_BOUNDS)
+  })
+})
+
+describe('image.resize (V-6)', () => {
+  const resizePoints = [
+    { name: 'resize-inside-half', params: { width: 64, height: 64, fit: 'inside' as const } },
+    { name: 'resize-cover-crop', params: { width: 96, height: 48, fit: 'cover' as const } },
+    { name: 'resize-inside-upscale', params: { width: 192, height: 192, fit: 'inside' as const } },
+  ]
+
+  it.each(resizePoints)('$name', ({ name, params }) => {
+    const geometry = computeFitGeometry({ width: source.width, height: source.height }, params)
+    const actual = bilinearResample(source, geometry)
+    const golden = readRaster(join(FIXTURES_DIR, 'golden', `${name}.rgba`))
+    expect(actual.width).toBe(golden.width)
+    expect(actual.height).toBe(golden.height)
+    const drift = measureDrift(actual.pixels, golden.pixels)
+    assertWithinBounds(drift, RESIZE_BOUNDS)
   })
 })

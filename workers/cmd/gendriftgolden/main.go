@@ -74,6 +74,23 @@ var goldenPoints = []struct {
 			{"sharpen-1.0", map[string]interface{}{"intensity": 1.0}},
 		},
 	},
+	{
+		// V-2's scope explicitly excluded image.resize ("different mechanism --
+		// geometry vs. per-pixel color"). TASK-resize-drift.md (V-6) measures
+		// it separately: govips's Thumbnail() resamples with Lanczos3 (confirmed
+		// against libvips/resample/resize.c's vips_resize_class_init default),
+		// while the live preview's GPU texture sampler is hardware bilinear --
+		// a real algorithmic difference, not a rounding gap. dumpRGBA already
+		// reads width/height off the actual output image, so resize's varying
+		// output dimensions need no special handling below.
+		processor: "image.resize",
+		fn:        processors.Resize,
+		points: []point{
+			{"resize-inside-half", map[string]interface{}{"width": 64.0, "height": 64.0, "fit": "inside"}},
+			{"resize-cover-crop", map[string]interface{}{"width": 96.0, "height": 48.0, "fit": "cover"}},
+			{"resize-inside-upscale", map[string]interface{}{"width": 192.0, "height": 192.0, "fit": "inside"}},
+		},
+	},
 }
 
 func main() {
