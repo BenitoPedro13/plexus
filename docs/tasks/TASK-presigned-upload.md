@@ -184,9 +184,13 @@ global.
   matching the existing `@testcontainers/postgresql`/`@testcontainers/nats` pattern):
   presign a PUT, actually `fetch()` a PUT against the returned URL, then presign and
   `fetch()` a GET, assert the round-tripped bytes match.
-- `apps/orchestrator/src/upload/upload.controller.spec.ts` — HTTP-level, same style as
-  `export.controller.spec.ts` (against the real service backed by the testcontainer, not a
-  mock).
+- `apps/orchestrator/src/upload/upload.controller.integration-spec.ts` — HTTP-level, same
+  style as `export.controller.spec.ts` (against the real service backed by the
+  testcontainer, not a mock). Named `.integration-spec.ts` rather than `.spec.ts` as
+  originally planned here — unlike `export.controller.spec.ts` (which only needs a fake
+  local HTTP server), this test needs a real MinIO container, so it has to follow the
+  repo's established fast-vs-infra test naming split (`jobs.service.integration-spec.ts`
+  etc.) or `pnpm test` would unexpectedly require Docker.
 
 ### 7. Docs
 
@@ -242,7 +246,7 @@ don't hit.
 | `apps/orchestrator/src/upload/upload.service.ts` | new | `presignUpload`/`presignDownload`/`ensureBucket` via `minio` npm client |
 | `apps/orchestrator/src/upload/upload.controller.ts` | new | `POST /uploads/presign`, `GET /uploads/presign-download` |
 | `apps/orchestrator/src/upload/upload.service.integration-spec.ts` | new | real MinIO via `@testcontainers/minio`, real `fetch()` PUT/GET round-trip |
-| `apps/orchestrator/src/upload/upload.controller.spec.ts` | new | HTTP-level test against the real service |
+| `apps/orchestrator/src/upload/upload.controller.integration-spec.ts` | new | HTTP-level test against the real service (renamed from the originally planned `.spec.ts` — needs real MinIO, see Mudanças planeadas §6) |
 | `apps/orchestrator/src/app.module.ts` | edit | register `UploadModule` |
 | `apps/orchestrator/src/jobs/dto/create-job.dto.ts` | edit | update `inputRef`'s doc comment: now an object storage key, not a raw path |
 | `apps/orchestrator/package.json` | edit | add `minio` dependency; add `@testcontainers/minio` devDependency |

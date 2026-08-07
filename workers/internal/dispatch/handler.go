@@ -5,26 +5,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/benitopedro13/plexus/workers/internal/processors"
+	"github.com/benitopedro13/plexus/workers/internal/storage"
 )
 
 // Handle dispatches a StepDispatchMessage to the registered built-in
 // processor (workers/internal/processors) and publishes the result. An
 // unparsable message is Term()'d — it's malformed, not a valid job the
-// orchestrator is waiting on. An unknown processor id or a processor
-// validation/execution error both produce a normal StepResultFailed, since
-// the orchestrator's job state machine is already listening for that status
-// (apps/orchestrator/src/jobs/job-result-handler.ts) — silently dropping
-// either would strand the job in RUNNING forever.
+// orchestrator is waiting on. An unknown processor id, a download/upload
+// failure, or a processor validation/execution error all produce a normal
+// StepResultFailed, since the orchestrator's job state machine is already
+// listening for that status (apps/orchestrator/src/jobs/job-result-handler.ts)
+// — silently dropping any of them would strand the job in RUNNING forever.
 //
 // Factored out of cmd/worker/main.go so it can be exercised directly
 // against a real NATS instance in dispatch_test.go, independent of the
 // process wiring (signal handling, consumer setup) in main().
-func Handle(ctx context.Context, js jetstream.JetStream, msg jetstream.Msg) error {
+func Handle(ctx context.Context, js jetstream.JetStream, store *storage.Client, msg jetstream.Msg) error {
 	var in StepDispatchMessage
 	if err := json.Unmarshal(msg.Data(), &in); err != nil {
 		if termErr := msg.Term(); termErr != nil {
@@ -40,11 +43,7 @@ func Handle(ctx context.Context, js jetstream.JetStream, msg jetstream.Msg) erro
 		JobStepID: in.JobStepID,
 	}
 
-	fn, ok := processors.Lookup(in.Processor)
-	if !ok {
-		out.Status = StepResultFailed
-		out.Error = fmt.Sprintf("unknown processor: %s", in.Processor)
-	} else if outputRef, err := fn(ctx, in.JobStepID, in.InputRef, in.Params); err != nil {
+	if outputRef, err := runStep(ctx, store, in); err != nil {
 		out.Status = StepResultFailed
 		out.Error = err.Error()
 	} else {
@@ -69,4 +68,36 @@ func Handle(ctx context.Context, js jetstream.JetStream, msg jetstream.Msg) erro
 	}
 
 	return nil
+}
+
+// runStep downloads in.InputRef (an object-storage key) to a local temp
+// file, runs the registered processor against that local copy exactly as
+// before object storage existed, uploads the processor's local output back
+// to object storage under a fresh key, and returns that key. Processors
+// themselves are unmodified — this confines the storage I/O to one boundary
+// layer, the same shape TASK-editor-export.md used for render.RunRecipe.
+func runStep(ctx context.Context, store *storage.Client, in StepDispatchMessage) (outputRef string, err error) {
+	fn, ok := processors.Lookup(in.Processor)
+	if !ok {
+		return "", fmt.Errorf("unknown processor: %s", in.Processor)
+	}
+
+	localIn, cleanupIn, err := store.Download(ctx, in.InputRef)
+	if err != nil {
+		return "", fmt.Errorf("download input %q: %w", in.InputRef, err)
+	}
+	defer cleanupIn()
+
+	localOut, err := fn(ctx, in.JobStepID, localIn, in.Params)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.Remove(localOut) }()
+
+	objectKey := fmt.Sprintf("steps/%s%s", in.JobStepID, filepath.Ext(localOut))
+	if err := store.Upload(ctx, localOut, objectKey); err != nil {
+		return "", fmt.Errorf("upload output %q: %w", localOut, err)
+	}
+
+	return objectKey, nil
 }

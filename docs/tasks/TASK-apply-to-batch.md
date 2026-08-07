@@ -27,7 +27,7 @@ been connected:
   (both systems consume `Recipe`/`PipelineStepDefinition` today, and after `TASK-recipe-
   packages-extraction.md`, the literal same schema) but has zero code path proving it.
 
-**Depends on** `TASK-object-storage-presigned-upload.md` (many files need to actually reach
+**Depends on** `TASK-presigned-upload.md` (many files need to actually reach
 worker replicas) and `TASK-recipe-packages-extraction.md` (the orchestrator must accept
 every processor id the editor can produce, not just Phase 1's original seven). Benefits
 from, but doesn't strictly require, `TASK-realtime-progress-sse.md` (batch progress is far
@@ -42,8 +42,8 @@ more useful with live per-file status than a polling loop over N job ids).
   translation step" proof: `apps/web`'s Apply-to-Batch flow calls `POST /pipelines` with
   the editor's own `recipe.steps` value, not a reshaped copy.
 - **`apps/orchestrator/src/jobs/`** — new `POST /jobs/batch` accepting `{ pipelineId,
-  inputRefs: string[] }` (each an object-storage key from `TASK-object-storage-presigned-
-  upload.md`'s presign flow) — creates N `jobs` rows (one per `inputRef`) against the same
+  inputRefs: string[] }` (each an object-storage key from `TASK-presigned-upload.md`'s
+  `POST /uploads/presign` flow) — creates N `jobs` rows (one per `inputRef`) against the same
   `pipelineId`, dispatches each via the existing `JobDispatchService.dispatchNext`
   unmodified (it already operates per-job; batching is "call it N times," not new dispatch
   logic). Returns the N created job ids. `[VERIFY: whether NestJS + Drizzle's transaction
@@ -54,7 +54,7 @@ more useful with live per-file status than a polling loop over N job ids).
   existing Export button, or a new button beside it — a UI-only decision, not a data-model
   one). Opens a multi-file picker (reusing the existing dropzone's drag-and-drop
   affordance, extended to accept multiple files rather than the current single-`File`
-  path), uploads each file via `TASK-object-storage-presigned-upload.md`'s presign
+  path), uploads each file via `TASK-presigned-upload.md`'s `POST /uploads/presign`
   endpoint, `POST /pipelines` once with the current `deriveRecipe()` output, then `POST
   /jobs/batch` with the resulting `pipelineId` and every uploaded key.
 - **`apps/web/src/app/batch/[pipelineId]/page.tsx` (new)** — a batch-progress view: one

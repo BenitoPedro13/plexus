@@ -1,5 +1,16 @@
 # TASK: Object storage + presigned upload (resolves D-3, D-11)
 
+> **Superseded 2026-08-07 by [`TASK-presigned-upload.md`](TASK-presigned-upload.md).** A
+> pre-existing, more thoroughly researched task doc covering this exact scope was found
+> already in the repo when work on this doc was about to start. It did the CLAUDE.md §2.0
+> live-verification this doc left as an unchecked `[VERIFY]` tag and found documented
+> `SignatureDoesNotMatch` failures running AWS SDK v3's presigner against MinIO — so it
+> chose MinIO's own SDKs (`minio-go/v7`, `minio` npm) over `@aws-sdk/client-s3` below.
+> User confirmed `TASK-presigned-upload.md` as authoritative. Kept here only for history —
+> **do not implement against this doc.** `docs/90-deferred-register.md`'s `D-3`/`D-11` and
+> `docs/tasks/TASK-apply-to-batch.md` were updated to reference `TASK-presigned-upload.md`
+> instead.
+
 ## Cenário actual
 
 Nothing in the codebase talks to object storage. Every "file" the system knows about is a

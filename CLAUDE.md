@@ -39,9 +39,10 @@ editor, that goal has failed.
 
 1. `docs/plexus-media-pipeline-spec.md` — the full spec: problem statement, goals,
    architecture, P0/P1/P2 requirements, success metrics, open questions, phasing.
-2. Its **Open Questions** section — decisions still unmade (object storage self-hosted vs
-   managed, auth approach, WebGPU fallback fidelity, composite-slider → parameter mapping,
-   plugin sandboxing tier). Do not silently resolve one of these in code; see §1 and §3.
+2. Its **Open Questions** section — decisions still unmade (auth approach, WebGPU fallback
+   fidelity, plugin sandboxing tier — object storage and composite-slider → parameter
+   mapping are resolved, see the section itself for current status). Do not silently
+   resolve one of these in code; see §1 and §3.
 3. `docs/90-deferred-register.md` — **living document, create it in the same pass that
    first postpones something.** Everything deferred, unverified, or deliberately debt-shaped
    lives there once implementation starts.
@@ -63,7 +64,7 @@ MVP) is a shippable milestone on its own.
 | Plugin contract | **gRPC (protobuf)** — `Process(input) -> output`, language-agnostic, registered at runtime |
 | Queue + event bus | **NATS JetStream** — persistent, replayable; one piece of infra for both job dispatch and the realtime progress stream (deliberately not RabbitMQ) |
 | Data | **PostgreSQL** via **Drizzle ORM** (`drizzle-orm/node-postgres`) — jobs, pipelines, recipes, plugin registry. Chosen over Prisma specifically because Prisma still has no native PostGIS geometry/geography support (`TASK-job-state-machine.md`); SQL-first Drizzle doesn't block a future Places/map view built on photo GPS EXIF data |
-| Objects | **MinIO / S3-compatible** — presigned-URL upload/download, never proxy large files through the API (self-hosted vs managed is an open question) |
+| Objects | **MinIO** (self-hosted, resolved — see `docs/90-deferred-register.md` D-3) — presigned-URL upload/download via each side's own MinIO SDK (`minio-go/v7` in `workers/internal/storage`, the `minio` npm client in `apps/orchestrator/src/upload`), never proxy large files through the API |
 | Realtime | SSE/WebSocket fan-out to the frontend, driven off the same NATS event stream used for dispatch |
 
 The Go/TypeScript split is architecturally load-bearing, not decorative: TypeScript where

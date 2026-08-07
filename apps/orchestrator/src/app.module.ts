@@ -6,9 +6,17 @@ import { ExportModule } from './export/export.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NatsModule } from './nats/nats.module';
 import { PipelinesModule } from './pipelines/pipelines.module';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
-  imports: [DbModule, NatsModule, PipelinesModule, JobsModule, ExportModule],
+  imports: [
+    DbModule,
+    NatsModule,
+    PipelinesModule,
+    JobsModule,
+    ExportModule,
+    UploadModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

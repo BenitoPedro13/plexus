@@ -13,6 +13,7 @@ import (
 
 	"github.com/benitopedro13/plexus/workers/internal/dispatch"
 	"github.com/benitopedro13/plexus/workers/internal/processors"
+	"github.com/benitopedro13/plexus/workers/internal/storage"
 )
 
 const dispatchDurableName = "worker-dispatch"
@@ -25,6 +26,13 @@ func main() {
 
 	if err := processors.CheckAvailable(); err != nil {
 		log.Fatalf("check ffmpeg: %v", err)
+	}
+
+	storageCtx, storageCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	store, err := storage.New(storageCtx)
+	storageCancel()
+	if err != nil {
+		log.Fatalf("connect to object storage: %v", err)
 	}
 
 	url := os.Getenv("NATS_URL")
@@ -63,7 +71,7 @@ func main() {
 	}
 
 	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
-		if err := dispatch.Handle(context.Background(), js, msg); err != nil {
+		if err := dispatch.Handle(context.Background(), js, store, msg); err != nil {
 			log.Printf("handle dispatch message: %v", err)
 		}
 	})
