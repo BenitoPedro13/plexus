@@ -170,8 +170,68 @@ export function highlightsShadowsL(l: number, highlights: number, shadows: numbe
 // no visible output.
 const CHROMA_EPSILON = 1e-4
 
-export function applyAdjustColor(pixel: RGBA, params: AdjustColorParams): RGBA {
-  const lab = rgbToLab(pixel.r, pixel.g, pixel.b)
+// Mirrors adjust_color.go's castMeanEpsilon -- floors a per-band mean before
+// it's used as a divisor so a fully black band doesn't produce an infinite
+// scale factor.
+const CAST_MEAN_EPSILON = 1e-6
+
+export interface MeanRGB {
+  r: number
+  g: number
+  b: number
+}
+
+// Plain arithmetic mean over every pixel -- the CPU reference doesn't need
+// the GPU renderers' box-downsample-pyramid approximation (webgpu-renderer.ts/
+// webgl2-renderer.ts's mean-downsample chain, TASK-color-cast-preview-parity.md),
+// it can compute the exact per-band mean directly. Callers compute this once
+// per image and pass it into applyAdjustColor -- mirrors adjust_color.go's
+// applyCast, which also computes stats once before scaling every pixel.
+export function computeMeanRGB(pixels: readonly RGBA[]): MeanRGB {
+  let r = 0
+  let g = 0
+  let b = 0
+  for (const p of pixels) {
+    r += p.r
+    g += p.g
+    b += p.b
+  }
+  const n = pixels.length
+  return { r: r / n, g: g / n, b: b / n }
+}
+
+// Mirrors adjust_color.go's applyCast: scales each of R/G/B toward the mean
+// of the three per-band means, blended by castStrength (0 = no-op, 1 = full
+// grey-world correction). Runs before the saturation/chroma boost below,
+// matching Go's pass order (applyCast, then Modulate).
+function applyCast(pixel: RGBA, castStrength: number, mean: MeanRGB): RGBA {
+  const target = (mean.r + mean.g + mean.b) / 3
+  const scale = (channel: number, channelMean: number): number =>
+    channel * (1 + castStrength * (target / Math.max(channelMean, CAST_MEAN_EPSILON) - 1))
+  return {
+    r: scale(pixel.r, mean.r),
+    g: scale(pixel.g, mean.g),
+    b: scale(pixel.b, mean.b),
+    a: pixel.a,
+  }
+}
+
+// `mean` is the whole-image per-band mean (computeMeanRGB) -- required
+// whenever params.castStrength !== 0 (an omitted mean there is a caller
+// bug, not a valid no-op: Go always has real image stats by the time
+// castStrength is nonzero). castStrength === 0 skips the cast branch
+// entirely and never reads `mean`, so every pre-existing call site (which
+// never sets castStrength) needs no change.
+export function applyAdjustColor(pixel: RGBA, params: AdjustColorParams, mean?: MeanRGB): RGBA {
+  let source = pixel
+  if (params.castStrength !== 0) {
+    if (!mean) {
+      throw new Error('applyAdjustColor: mean is required when castStrength !== 0')
+    }
+    source = applyCast(pixel, params.castStrength, mean)
+  }
+
+  const lab = rgbToLab(source.r, source.g, source.b)
   const chroma = Math.hypot(lab.a, lab.b)
   const scaledChroma = Math.max(0, chroma * (1 + params.saturation))
 

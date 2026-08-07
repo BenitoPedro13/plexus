@@ -8,27 +8,28 @@ import { SharpenControl } from '@/components/editor/SharpenControl'
 import { PreviewCanvas } from '@/components/PreviewCanvas'
 import { useRecipeHistory } from '@/lib/editor/history'
 import { identityLightParams } from '@/lib/editor/light-blend'
-import type { AdjustLightParams, BlackAndWhiteParams, Recipe } from '@/lib/recipe/schema'
+import type { AdjustColorParams, AdjustLightParams, BlackAndWhiteParams, Recipe } from '@/lib/recipe/schema'
 
 interface EditState {
   width: number
   height: number
   fit: 'inside' | 'cover'
   light: AdjustLightParams
-  saturation: number
+  color: AdjustColorParams
   bwEnabled: boolean
   bw: BlackAndWhiteParams
   sharpenIntensity: number
 }
 
 const identityBwParams: BlackAndWhiteParams = { intensity: 0, neutrals: 0, tone: 0 }
+const identityColorParams: AdjustColorParams = { saturation: 0, castStrength: 0 }
 
 const initialEditState: EditState = {
   width: 400,
   height: 400,
   fit: 'inside',
   light: identityLightParams,
-  saturation: 0,
+  color: identityColorParams,
   bwEnabled: false,
   bw: identityBwParams,
   sharpenIntensity: 0,
@@ -58,12 +59,8 @@ function deriveRecipe(state: EditState): Recipe {
     steps.push({ id: 'light', processor: 'image.adjustLight', params: light })
   }
 
-  if (state.saturation !== 0) {
-    steps.push({
-      id: 'color',
-      processor: 'image.adjustColor',
-      params: { saturation: state.saturation, castStrength: 0 },
-    })
+  if (state.color.saturation !== 0 || state.color.castStrength !== 0) {
+    steps.push({ id: 'color', processor: 'image.adjustColor', params: state.color })
   }
 
   if (state.bwEnabled) {
@@ -174,8 +171,8 @@ export default function EditorPage() {
           onCommit={history.commit}
         />
         <ColorControl
-          saturation={live.saturation}
-          onChange={(saturation) => history.setPresent({ ...live, saturation })}
+          value={live.color}
+          onChange={(color) => history.setPresent({ ...live, color })}
           onCommit={history.commit}
         />
         <BlackAndWhiteControl

@@ -61,6 +61,11 @@ var goldenPoints = []struct {
 			{"color-sat-0.5", map[string]interface{}{"saturation": 0.5}},
 			{"color-sat-neg0.5", map[string]interface{}{"saturation": -0.5}},
 			{"color-sat-1.0", map[string]interface{}{"saturation": 1.0}},
+			// Isolated single-param points (docs/tasks/TASK-color-cast-preview-parity.md,
+			// resolving D-30) so drift from the new mean-reduction preview pass
+			// isn't mixed with the existing near-bit-exact saturation path.
+			{"color-cast-0.5", map[string]interface{}{"saturation": 0.0, "castStrength": 0.5}},
+			{"color-cast-1.0", map[string]interface{}{"saturation": 0.0, "castStrength": 1.0}},
 		},
 	},
 	{

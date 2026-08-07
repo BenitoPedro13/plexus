@@ -7,6 +7,7 @@ import {
   applyAdjustLight,
   applyBlackAndWhite,
   applyUnsharpMask,
+  computeMeanRGB,
   gaussianKernel1D,
   rgbToLab,
   type RGBA,
@@ -50,6 +51,13 @@ function readRaster(path: string): Raster {
 }
 
 const source = readRaster(join(FIXTURES_DIR, 'source.rgba'))
+
+// Whole-source-image per-band mean, computed once -- image.adjustColor's
+// castStrength points below test the control in isolation directly against
+// source.pixels, so the mean over the untouched source raster is the
+// correct reference (matches what adjust_color.go's applyCast computes
+// when image.adjustColor is the first/only step touching the image).
+const sourceMeanRGB = computeMeanRGB(source.pixels)
 
 interface DriftResult {
   maeR: number
@@ -239,7 +247,19 @@ const LIGHT_BOUNDS: DriftBounds = { mae: 0.6, max: 1.5, meanDeltaE: 0.4 }
 
 // Color: near bit-exact (Lab round-trip matches govips's Modulate/LCH
 // path, V-11) -- worst observed mae=0.148, max=0.749, meanDeltaE=0.125
-// (color-sat-neg0.5).
+// (color-sat-neg0.5). Extended by TASK-color-cast-preview-parity.md (D-30)
+// with two isolated castStrength points: since computeMeanRGB computes the
+// exact arithmetic mean (matching govips's Average() exactly) and both
+// sides run the same linear-scale formula, these are effectively bit-exact
+// -- worst observed mae=0.000016, max=0.0001, meanDeltaE=0.000007
+// (color-cast-0.5/1.0, identical to 5 decimal places since the grey-world
+// scale factor only depends on castStrength through a linear term). This
+// only measures color-math.ts's TS reference against Go -- it does not
+// exercise the GPU renderers' box-downsample-pyramid mean approximation
+// (webgpu-renderer.ts/webgl2-renderer.ts), which has no non-power-of-two
+// bias in this CPU-only test harness; see D-30's resolution note in
+// docs/90-deferred-register.md. Bound unchanged -- both new points land
+// far inside the existing margin.
 const COLOR_BOUNDS: DriftBounds = { mae: 0.25, max: 1.0, meanDeltaE: 0.2 }
 
 // B&W: near bit-exact -- worst observed mae=0.467, max=0.905,
@@ -309,6 +329,12 @@ describe('recipe fidelity drift (V-2)', () => {
     { name: 'color-sat-0.5', params: { saturation: 0.5, castStrength: 0 } },
     { name: 'color-sat-neg0.5', params: { saturation: -0.5, castStrength: 0 } },
     { name: 'color-sat-1.0', params: { saturation: 1.0, castStrength: 0 } },
+    // Isolated single-param points (docs/tasks/TASK-color-cast-preview-parity.md,
+    // resolving D-30) exercising the new GPU mean-downsample-pyramid preview
+    // pass, kept separate from the saturation points above so drift is
+    // attributable to the new mean-reduction math specifically.
+    { name: 'color-cast-0.5', params: { saturation: 0.0, castStrength: 0.5 } },
+    { name: 'color-cast-1.0', params: { saturation: 0.0, castStrength: 1.0 } },
   ]
 
   const bwPoints = [
@@ -329,7 +355,7 @@ describe('recipe fidelity drift (V-2)', () => {
   })
 
   it.each(colorPoints)('Color: $name', ({ name, params }) => {
-    const actual = source.pixels.map((p) => applyAdjustColor(p, params))
+    const actual = source.pixels.map((p) => applyAdjustColor(p, params, sourceMeanRGB))
     const golden = readRaster(join(FIXTURES_DIR, 'golden', `${name}.rgba`)).pixels
     const drift = measureDrift(actual, golden)
     assertWithinBounds(drift, COLOR_BOUNDS)

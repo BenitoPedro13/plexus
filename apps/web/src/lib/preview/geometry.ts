@@ -66,6 +66,24 @@ export function computeFitGeometry(
   }
 }
 
+// Both render backends need this: the size chain for the mean-downsample
+// pyramid image.adjustColor's castStrength uses (webgpu-renderer.ts's
+// encodeMeanChain / webgl2-renderer.ts's equivalent, TASK-color-cast-preview-parity.md).
+// Each step halves both dimensions (rounding up, so an odd size still
+// terminates), ending at 1x1 -- that final 1x1 texture holds the whole
+// image's average color once every level has been rendered.
+export function computeMeanChainSizes(source: ImageDimensions): ImageDimensions[] {
+  const sizes: ImageDimensions[] = []
+  let width = source.width
+  let height = source.height
+  while (width > 1 || height > 1) {
+    width = Math.max(1, Math.ceil(width / 2))
+    height = Math.max(1, Math.ceil(height / 2))
+    sizes.push({ width, height })
+  }
+  return sizes
+}
+
 type ResizeStep = Extract<RecipeStep, { processor: 'image.resize' }>
 
 // Both render backends need this: a recipe with more than one image.resize

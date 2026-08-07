@@ -1,6 +1,6 @@
 import type { Recipe } from '@/lib/recipe/schema'
 import { collectOrderedAdjustmentSteps, gaussianKernel1D, type AdjustmentStep } from './color-math'
-import { computeFitGeometry, findLastResizeStep } from './geometry'
+import { computeFitGeometry, computeMeanChainSizes, findLastResizeStep, type ImageDimensions } from './geometry'
 import type { PreviewRenderer } from './types'
 
 // Radius=2 (5-tap) at the Go processor's fixed sigma=0.5
@@ -192,23 +192,40 @@ void main() {
 `
 
 // Mirrors color-math.ts's applyAdjustColor -- img.Modulate(1, 1+saturation,
-// 0): convert to LCh, scale chroma, convert back. uParams.x = saturation.
+// 0): convert to LCh, scale chroma, convert back. uParams.x = saturation,
+// uParams.y = castStrength.
+//
+// castStrength (mirrors color-math.ts's applyCast, adjust_color.go's
+// applyCast): grey-world white balance, run on c.rgb before the Lab
+// conversion above, matching Go's pass order (cast, then Modulate). uMean
+// is a 1x1 texture holding the whole image's per-band mean -- see
+// MEAN_DOWNSAMPLE_FRAGMENT_SHADER_SOURCE and runMeanChain below for how
+// it's produced.
 const ADJUST_COLOR_FRAGMENT_SHADER_SOURCE =
   /* glsl */ `#version 300 es
 precision highp float;
 
 uniform vec4 uParams;
 uniform sampler2D uSource;
+uniform sampler2D uMean;
 in vec2 vUV;
 out vec4 outColor;
 ` +
   LAB_HELPERS_GLSL +
   /* glsl */ `
 const float CHROMA_EPSILON = 1e-4;
+const float CAST_MEAN_EPSILON = 1e-6;
 
 void main() {
   vec4 c = texture(uSource, vUV);
-  vec3 lab = rgbToLab(c.rgb);
+
+  float castStrength = uParams.y;
+  vec3 mean = texelFetch(uMean, ivec2(0, 0), 0).rgb;
+  float target = (mean.r + mean.g + mean.b) / 3.0;
+  vec3 scale = 1.0 + castStrength * (target / max(mean, vec3(CAST_MEAN_EPSILON)) - vec3(1.0));
+  vec3 castCorrected = c.rgb * scale;
+
+  vec3 lab = rgbToLab(castCorrected);
   float chroma = length(vec2(lab.y, lab.z));
   float scaledChroma = max(0.0, chroma * (1.0 + uParams.x));
   vec2 newAB = vec2(0.0, 0.0);
@@ -220,6 +237,33 @@ void main() {
   }
   vec3 newLab = vec3(lab.x, newAB.x, newAB.y);
   outColor = vec4(labToRgb(newLab), c.a);
+}
+`
+
+// Reduces uSource to its average color, one 2x2-box halving per draw -- see
+// runMeanChain, which chains this program across computeMeanChainSizes()'s
+// size list until reaching a 1x1 output. texelFetch reads exact texels
+// (clamped to the input's real dimensions, so an odd size duplicates its
+// last texel rather than reading out of bounds); gl_FragCoord addresses the
+// *output* texel directly, one invocation per output pixel.
+const MEAN_DOWNSAMPLE_FRAGMENT_SHADER_SOURCE = /* glsl */ `#version 300 es
+precision highp float;
+
+uniform sampler2D uSource;
+out vec4 outColor;
+
+void main() {
+  ivec2 outCoord = ivec2(gl_FragCoord.xy);
+  ivec2 dims = textureSize(uSource, 0);
+  int x0 = min(outCoord.x * 2, dims.x - 1);
+  int x1 = min(outCoord.x * 2 + 1, dims.x - 1);
+  int y0 = min(outCoord.y * 2, dims.y - 1);
+  int y1 = min(outCoord.y * 2 + 1, dims.y - 1);
+  vec4 c00 = texelFetch(uSource, ivec2(x0, y0), 0);
+  vec4 c10 = texelFetch(uSource, ivec2(x1, y0), 0);
+  vec4 c01 = texelFetch(uSource, ivec2(x0, y1), 0);
+  vec4 c11 = texelFetch(uSource, ivec2(x1, y1), 0);
+  outColor = (c00 + c10 + c01 + c11) * 0.25;
 }
 `
 
@@ -432,6 +476,14 @@ export class WebGL2Renderer implements PreviewRenderer {
   private blurH: ContentProgram | null = null
   private blurV: ContentProgram | null = null
   private unsharp: ContentProgram | null = null
+  private meanDownsample: ContentProgram | null = null
+
+  // Chain of progressively-halved textures/framebuffers (computeMeanChainSizes)
+  // used to reduce image.adjustColor's input to its whole-image average
+  // color -- see runMeanChain. Empty when the source is already 1x1.
+  private meanChainTextures: WebGLTexture[] = []
+  private meanChainFbos: WebGLFramebuffer[] = []
+  private meanChainSizes: ImageDimensions[] = []
 
   private sourceDimensions = { width: 0, height: 0 }
 
@@ -475,6 +527,10 @@ export class WebGL2Renderer implements PreviewRenderer {
     const blurFboA = createFramebuffer(gl, blurScratchA)
     const blurFboB = createFramebuffer(gl, blurScratchB)
 
+    const meanChainSizes: ImageDimensions[] = computeMeanChainSizes({ width, height })
+    const meanChainTextures = meanChainSizes.map((size) => createRenderTargetTexture(gl, size.width, size.height))
+    const meanChainFbos = meanChainTextures.map((texture) => createFramebuffer(gl, texture))
+
     const blitProgram = createProgram(gl, BLIT_VERTEX_SHADER_SOURCE, BLIT_FRAGMENT_SHADER_SOURCE)
 
     const buildContentProgram = (fragmentSource: string, textureUniformNames: string[]): ContentProgram => {
@@ -502,14 +558,47 @@ export class WebGL2Renderer implements PreviewRenderer {
     this.blurFboA = blurFboA
     this.blurFboB = blurFboB
     this.adjustLight = buildContentProgram(ADJUST_LIGHT_FRAGMENT_SHADER_SOURCE, ['uSource'])
-    this.adjustColor = buildContentProgram(ADJUST_COLOR_FRAGMENT_SHADER_SOURCE, ['uSource'])
+    this.adjustColor = buildContentProgram(ADJUST_COLOR_FRAGMENT_SHADER_SOURCE, ['uSource', 'uMean'])
     this.blackAndWhite = buildContentProgram(BLACK_AND_WHITE_FRAGMENT_SHADER_SOURCE, ['uSource'])
     this.blurH = buildContentProgram(blurFragmentShaderSource('horizontal'), ['uSource'])
     this.blurV = buildContentProgram(blurFragmentShaderSource('vertical'), ['uSource'])
     this.unsharp = buildContentProgram(UNSHARP_FRAGMENT_SHADER_SOURCE, ['uOriginal', 'uBlurred'])
+    this.meanDownsample = buildContentProgram(MEAN_DOWNSAMPLE_FRAGMENT_SHADER_SOURCE, ['uSource'])
+    this.meanChainTextures = meanChainTextures
+    this.meanChainFbos = meanChainFbos
+    this.meanChainSizes = meanChainSizes
     this.sourceDimensions = { width, height }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+  }
+
+  // Runs the mean-downsample chain from `input` (full source resolution)
+  // through meanChainTextures/meanChainFbos, returning the final 1x1
+  // texture holding the whole image's per-band average --
+  // image.adjustColor's castStrength input. Falls back to `input` itself
+  // when the source is already 1x1 (computeMeanChainSizes returns an empty
+  // chain in that case).
+  private runMeanChain(input: WebGLTexture): WebGLTexture {
+    if (this.meanChainTextures.length === 0) {
+      return input
+    }
+    const gl = this.gl!
+    let currentInput = input
+    for (let i = 0; i < this.meanChainTextures.length; i++) {
+      const size = this.meanChainSizes[i]
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.meanChainFbos[i])
+      gl.viewport(0, 0, size.width, size.height)
+      gl.useProgram(this.meanDownsample!.program)
+      gl.activeTexture(gl.TEXTURE0)
+      gl.bindTexture(gl.TEXTURE_2D, currentInput)
+      gl.uniform1i(this.meanDownsample!.textureLocations[0], 0)
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer)
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4 * 4, 0)
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4 * 4, 2 * 4)
+      gl.drawArrays(gl.TRIANGLES, 0, 6)
+      currentInput = this.meanChainTextures[i]
+    }
+    return currentInput
   }
 
   private runContentPass(
@@ -557,7 +646,17 @@ export class WebGL2Renderer implements PreviewRenderer {
         return
       }
       case 'image.adjustColor': {
-        this.runContentPass(this.adjustColor!, [step.params.saturation], [input], outputFbo)
+        // The mean chain runs unconditionally (cheap next to the per-pixel
+        // passes already run every frame during a slider drag) rather than
+        // special-casing castStrength === 0 -- the shader's scale factor is
+        // an exact 1.0 there regardless of what uMean holds.
+        const meanTexture = this.runMeanChain(input)
+        this.runContentPass(
+          this.adjustColor!,
+          [step.params.saturation, step.params.castStrength],
+          [input, meanTexture],
+          outputFbo,
+        )
         return
       }
       case 'image.blackAndWhite': {
@@ -628,15 +727,15 @@ export class WebGL2Renderer implements PreviewRenderer {
   dispose(): void {
     if (this.gl) {
       const gl = this.gl
-      ;[this.blitProgram, this.adjustLight?.program, this.adjustColor?.program, this.blackAndWhite?.program, this.blurH?.program, this.blurV?.program, this.unsharp?.program].forEach(
+      ;[this.blitProgram, this.adjustLight?.program, this.adjustColor?.program, this.blackAndWhite?.program, this.blurH?.program, this.blurV?.program, this.unsharp?.program, this.meanDownsample?.program].forEach(
         (program) => {
           if (program) gl.deleteProgram(program)
         },
       )
-      ;[this.sourceTexture, this.texA, this.texB, this.blurScratchA, this.blurScratchB].forEach((texture) => {
+      ;[this.sourceTexture, this.texA, this.texB, this.blurScratchA, this.blurScratchB, ...this.meanChainTextures].forEach((texture) => {
         if (texture) gl.deleteTexture(texture)
       })
-      ;[this.fboA, this.fboB, this.blurFboA, this.blurFboB].forEach((fbo) => {
+      ;[this.fboA, this.fboB, this.blurFboA, this.blurFboB, ...this.meanChainFbos].forEach((fbo) => {
         if (fbo) gl.deleteFramebuffer(fbo)
       })
       if (this.vertexBuffer) gl.deleteBuffer(this.vertexBuffer)
@@ -661,5 +760,9 @@ export class WebGL2Renderer implements PreviewRenderer {
     this.blurH = null
     this.blurV = null
     this.unsharp = null
+    this.meanDownsample = null
+    this.meanChainTextures = []
+    this.meanChainFbos = []
+    this.meanChainSizes = []
   }
 }

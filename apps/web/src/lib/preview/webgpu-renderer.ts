@@ -1,7 +1,7 @@
 /// <reference types="@webgpu/types" />
 import type { Recipe } from '@/lib/recipe/schema'
 import { collectOrderedAdjustmentSteps, gaussianKernel1D, type AdjustmentStep } from './color-math'
-import { computeFitGeometry, findLastResizeStep } from './geometry'
+import { computeFitGeometry, computeMeanChainSizes, findLastResizeStep, type ImageDimensions } from './geometry'
 import type { PreviewRenderer } from './types'
 
 // Radius=2 (5-tap) at the Go processor's fixed sigma=0.5
@@ -219,7 +219,14 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
 `
 
 // Mirrors color-math.ts's applyAdjustColor -- img.Modulate(1, 1+saturation,
-// 0): convert to LCh, scale chroma, convert back. `params.x` = saturation.
+// 0): convert to LCh, scale chroma, convert back. `params.x` = saturation,
+// `params.y` = castStrength.
+//
+// castStrength (mirrors color-math.ts's applyCast, adjust_color.go's
+// applyCast): grey-world white balance, run on `c.rgb` before the Lab
+// conversion above, matching Go's pass order (cast, then Modulate).
+// `meanTexture` is a 1x1 texture holding the whole image's per-band mean --
+// see MEAN_DOWNSAMPLE_WGSL and encodeMeanChain below for how it's produced.
 const ADJUST_COLOR_WGSL =
   CONTENT_VERTEX_BLOCK +
   LAB_HELPERS_BLOCK +
@@ -227,13 +234,22 @@ const ADJUST_COLOR_WGSL =
 @group(0) @binding(0) var<uniform> params: vec4f;
 @group(0) @binding(1) var quadSampler: sampler;
 @group(0) @binding(2) var sourceTexture: texture_2d<f32>;
+@group(0) @binding(3) var meanTexture: texture_2d<f32>;
 
 const CHROMA_EPSILON: f32 = 1e-4;
+const CAST_MEAN_EPSILON: f32 = 1e-6;
 
 @fragment
 fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
   let c = textureSample(sourceTexture, quadSampler, in.uv);
-  let lab = rgbToLab(c.rgb);
+
+  let castStrength = params.y;
+  let mean = textureLoad(meanTexture, vec2i(0, 0), 0).rgb;
+  let target = (mean.r + mean.g + mean.b) / 3.0;
+  let scale = 1.0 + castStrength * (target / max(mean, vec3f(CAST_MEAN_EPSILON)) - vec3f(1.0));
+  let castCorrected = c.rgb * scale;
+
+  let lab = rgbToLab(castCorrected);
   let chroma = length(vec2f(lab.y, lab.z));
   let scaledChroma = max(0.0, chroma * (1.0 + params.x));
   var newAB = vec2f(0.0, 0.0);
@@ -245,6 +261,34 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
   }
   let newLab = vec3f(lab.x, newAB.x, newAB.y);
   return vec4f(labToRgb(newLab), c.a);
+}
+`
+
+// Reduces `sourceTexture` to its average color, one 2x2-box halving per
+// draw -- see encodeMeanChain, which chains this pipeline across
+// computeMeanChainSizes()'s size list until reaching a 1x1 output. No
+// sampler/uniform: textureLoad reads exact texels (clamped to the input's
+// real dimensions, so an odd size duplicates its last texel rather than
+// reading out of bounds) and @builtin(position) addresses the *output*
+// texel directly, one thread per output pixel.
+const MEAN_DOWNSAMPLE_WGSL =
+  CONTENT_VERTEX_BLOCK +
+  /* wgsl */ `
+@group(0) @binding(0) var sourceTexture: texture_2d<f32>;
+
+@fragment
+fn fragment_main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
+  let outCoord = vec2i(floor(fragCoord.xy));
+  let dims = vec2i(textureDimensions(sourceTexture));
+  let x0 = min(outCoord.x * 2, dims.x - 1);
+  let x1 = min(outCoord.x * 2 + 1, dims.x - 1);
+  let y0 = min(outCoord.y * 2, dims.y - 1);
+  let y1 = min(outCoord.y * 2 + 1, dims.y - 1);
+  let c00 = textureLoad(sourceTexture, vec2i(x0, y0), 0);
+  let c10 = textureLoad(sourceTexture, vec2i(x1, y0), 0);
+  let c01 = textureLoad(sourceTexture, vec2i(x0, y1), 0);
+  let c11 = textureLoad(sourceTexture, vec2i(x1, y1), 0);
+  return (c00 + c10 + c01 + c11) * 0.25;
 }
 `
 
@@ -368,6 +412,12 @@ export class WebGPURenderer implements PreviewRenderer {
   private blurHPipeline: GPURenderPipeline | null = null
   private blurVPipeline: GPURenderPipeline | null = null
   private unsharpPipeline: GPURenderPipeline | null = null
+  private meanDownsamplePipeline: GPURenderPipeline | null = null
+
+  // Chain of progressively-halved textures (computeMeanChainSizes) used to
+  // reduce image.adjustColor's input to its whole-image average color --
+  // see encodeMeanChain. Empty when the source is already 1x1.
+  private meanChainTextures: GPUTexture[] = []
 
   private sourceDimensions = { width: 0, height: 0 }
 
@@ -435,6 +485,15 @@ export class WebGPURenderer implements PreviewRenderer {
       })
     }
 
+    const meanChainSizes: ImageDimensions[] = computeMeanChainSizes({ width: source.width, height: source.height })
+    const meanChainTextures = meanChainSizes.map((size) =>
+      device.createTexture({
+        size: [size.width, size.height],
+        format: CONTENT_TEXTURE_FORMAT,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+      }),
+    )
+
     this.device = device
     this.context = context
     this.sampler = sampler
@@ -452,7 +511,39 @@ export class WebGPURenderer implements PreviewRenderer {
     this.blurHPipeline = createContentPipeline(blurWGSL('horizontal'))
     this.blurVPipeline = createContentPipeline(blurWGSL('vertical'))
     this.unsharpPipeline = createContentPipeline(UNSHARP_WGSL)
+    this.meanDownsamplePipeline = createContentPipeline(MEAN_DOWNSAMPLE_WGSL)
+    this.meanChainTextures = meanChainTextures
     this.sourceDimensions = { width: source.width, height: source.height }
+  }
+
+  // Runs the mean-downsample chain from `input` (full source resolution)
+  // through meanChainTextures, returning the final 1x1 texture holding the
+  // whole image's per-band average -- image.adjustColor's castStrength
+  // input. Falls back to `input` itself when the source is already 1x1
+  // (computeMeanChainSizes returns an empty chain in that case).
+  private encodeMeanChain(encoder: GPUCommandEncoder, input: GPUTexture): GPUTexture {
+    if (this.meanChainTextures.length === 0) {
+      return input
+    }
+    const device = this.device!
+    let currentInput = input
+    for (const output of this.meanChainTextures) {
+      const bindGroup = device.createBindGroup({
+        layout: this.meanDownsamplePipeline!.getBindGroupLayout(0),
+        entries: [{ binding: 0, resource: currentInput.createView() }],
+      })
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [
+          { view: output.createView(), loadOp: 'clear', clearValue: { r: 0, g: 0, b: 0, a: 1 }, storeOp: 'store' },
+        ],
+      })
+      pass.setPipeline(this.meanDownsamplePipeline!)
+      pass.setBindGroup(0, bindGroup)
+      pass.draw(6)
+      pass.end()
+      currentInput = output
+    }
+    return currentInput
   }
 
   private encodeUniformPass(
@@ -536,7 +627,20 @@ export class WebGPURenderer implements PreviewRenderer {
         return
       }
       case 'image.adjustColor': {
-        this.encodeUniformPass(encoder, this.adjustColorPipeline!, [step.params.saturation], [input], output)
+        // The mean chain runs unconditionally (cheap next to the per-pixel
+        // passes already run every frame during a slider drag) rather than
+        // special-casing castStrength === 0 -- the shader's scale factor is
+        // an exact 1.0 there regardless of what meanTexture holds, so
+        // skipping it would only save GPU time at the cost of a
+        // castStrength-dependent bind-group shape for the same pipeline.
+        const meanTexture = this.encodeMeanChain(encoder, input)
+        this.encodeUniformPass(
+          encoder,
+          this.adjustColorPipeline!,
+          [step.params.saturation, step.params.castStrength],
+          [input, meanTexture],
+          output,
+        )
         return
       }
       case 'image.blackAndWhite': {
@@ -628,6 +732,8 @@ export class WebGPURenderer implements PreviewRenderer {
     this.texB?.destroy()
     this.blurScratchA?.destroy()
     this.blurScratchB?.destroy()
+    this.meanChainTextures.forEach((texture) => texture.destroy())
+    this.meanChainTextures = []
     this.device?.destroy()
     this.device = null
     this.context = null
@@ -646,5 +752,6 @@ export class WebGPURenderer implements PreviewRenderer {
     this.blurHPipeline = null
     this.blurVPipeline = null
     this.unsharpPipeline = null
+    this.meanDownsamplePipeline = null
   }
 }

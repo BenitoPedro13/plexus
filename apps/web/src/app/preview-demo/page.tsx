@@ -22,6 +22,7 @@ export default function PreviewDemoPage() {
   const [contrast, setContrast] = useState(0)
   const [blackPoint, setBlackPoint] = useState(0)
   const [saturation, setSaturation] = useState(0)
+  const [castStrength, setCastStrength] = useState(0)
   const [bwIntensity, setBwIntensity] = useState(0)
   const [neutrals, setNeutrals] = useState(0)
   const [tone, setTone] = useState(0)
@@ -49,7 +50,7 @@ export default function PreviewDemoPage() {
       {
         id: 'preview-adjust-color',
         processor: 'image.adjustColor',
-        params: { saturation, castStrength: 0 },
+        params: { saturation, castStrength },
       },
       {
         id: 'preview-black-and-white',
@@ -124,6 +125,10 @@ export default function PreviewDemoPage() {
         <label>
           saturation ({saturation.toFixed(2)})
           <input type="range" min={-1} max={1} step={0.05} value={saturation} onChange={(e) => setSaturation(Number(e.target.value))} />
+        </label>
+        <label>
+          castStrength ({castStrength.toFixed(2)})
+          <input type="range" min={0} max={1} step={0.05} value={castStrength} onChange={(e) => setCastStrength(Number(e.target.value))} />
         </label>
       </fieldset>
       <fieldset>

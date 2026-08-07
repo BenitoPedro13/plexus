@@ -6,6 +6,7 @@ import {
   applyBlackAndWhite,
   applyUnsharpMask,
   collectOrderedAdjustmentSteps,
+  computeMeanRGB,
   gaussianKernel1D,
   highlightsShadowsL,
   type RGBA,
@@ -133,6 +134,63 @@ describe('applyAdjustColor', () => {
     expect(result.r).toBeCloseTo(GRAY.r, 2)
     expect(result.g).toBeCloseTo(GRAY.g, 2)
     expect(result.b).toBeCloseTo(GRAY.b, 2)
+  })
+
+  it('castStrength=0 is identity regardless of mean (TASK-color-cast-preview-parity.md, D-30)', () => {
+    const mean = { r: 0.1, g: 0.9, b: 0.1 }
+    const result = applyAdjustColor(RED, { saturation: 0, castStrength: 0 }, mean)
+    expect(result.r).toBeCloseTo(RED.r, 5)
+    expect(result.g).toBeCloseTo(RED.g, 5)
+    expect(result.b).toBeCloseTo(RED.b, 5)
+  })
+
+  it('castStrength=1 fully corrects a synthetic color cast toward equal per-band means', () => {
+    // A uniformly-tinted image: every pixel is RED, so the whole-image mean
+    // equals RED itself -- applyCast should scale each band to the mean of
+    // R/G/B's means (i.e. toward gray), same effect adjust_color.go's
+    // applyCast has on a real grey-world-correctable photo.
+    const mean = RED
+    const result = applyAdjustColor(RED, { saturation: 0, castStrength: 1 }, mean)
+    expect(result.r).toBeCloseTo(result.g, 2)
+    expect(result.g).toBeCloseTo(result.b, 2)
+  })
+
+  it('castStrength interpolates linearly between no correction and full correction', () => {
+    const mean = RED
+    const half = applyAdjustColor(RED, { saturation: 0, castStrength: 0.5 }, mean)
+    const full = applyAdjustColor(RED, { saturation: 0, castStrength: 1 }, mean)
+    const none = applyAdjustColor(RED, { saturation: 0, castStrength: 0 }, mean)
+    // half should sit between none and full on the R channel (RED's R
+    // channel moves down toward the grey-world target as castStrength rises)
+    expect(half.r).toBeLessThan(none.r)
+    expect(half.r).toBeGreaterThan(full.r)
+  })
+
+  it('throws when castStrength !== 0 and mean is omitted', () => {
+    expect(() => applyAdjustColor(RED, { saturation: 0, castStrength: 0.5 })).toThrow()
+  })
+
+  it('preserves alpha through the cast branch', () => {
+    const mean = { r: 0.1, g: 0.9, b: 0.1 }
+    const result = applyAdjustColor({ ...RED, a: 0.4 }, { saturation: 0, castStrength: 1 }, mean)
+    expect(result.a).toBe(0.4)
+  })
+})
+
+describe('computeMeanRGB', () => {
+  it('computes the plain arithmetic mean per band', () => {
+    const pixels: RGBA[] = [
+      { r: 0, g: 0, b: 0, a: 1 },
+      { r: 1, g: 0.5, b: 0.25, a: 1 },
+    ]
+    const mean = computeMeanRGB(pixels)
+    expect(mean.r).toBeCloseTo(0.5)
+    expect(mean.g).toBeCloseTo(0.25)
+    expect(mean.b).toBeCloseTo(0.125)
+  })
+
+  it('a single-pixel image is its own mean', () => {
+    expect(computeMeanRGB([RED])).toEqual({ r: RED.r, g: RED.g, b: RED.b })
   })
 })
 
