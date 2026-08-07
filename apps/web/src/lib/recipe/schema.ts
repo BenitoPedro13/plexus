@@ -7,6 +7,10 @@ export const imageProcessorId = z.enum([
   'image.resize',
   'image.convert',
   'image.compress',
+  'image.adjustLight',
+  'image.adjustColor',
+  'image.blackAndWhite',
+  'image.sharpen',
 ])
 
 export type ImageProcessorId = z.infer<typeof imageProcessorId>
@@ -39,6 +43,45 @@ export const compressParamsSchema = z.object({
 
 export type CompressParams = z.infer<typeof compressParamsSchema>
 
+// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
+// Deferred params (brilliance, highlights, shadows — blocked on V-7) intentionally
+// omitted: no schema field without a backing Go processor.
+export const adjustLightParamsSchema = z.object({
+  exposure: z.number().min(-3.0).max(3.0),
+  brightness: z.number().min(-1.0).max(1.0),
+  contrast: z.number().min(-1.0).max(1.0),
+  blackPoint: z.number().min(0.0).max(1.0),
+})
+
+export type AdjustLightParams = z.infer<typeof adjustLightParamsSchema>
+
+// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
+// Deferred params (vibrance, cast — blocked on V-8) intentionally omitted.
+export const adjustColorParamsSchema = z.object({
+  saturation: z.number().min(-1.0).max(1.0),
+})
+
+export type AdjustColorParams = z.infer<typeof adjustColorParamsSchema>
+
+// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
+// Deferred param (grain — blocked on V-8) intentionally omitted.
+export const blackAndWhiteParamsSchema = z.object({
+  intensity: z.number().min(0.0).max(1.0),
+  neutrals: z.number().min(-1.0).max(1.0),
+  tone: z.number().min(-1.0).max(1.0),
+})
+
+export type BlackAndWhiteParams = z.infer<typeof blackAndWhiteParamsSchema>
+
+// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
+// Deferred params (edges, falloff — no clean govips primitive found) intentionally
+// omitted.
+export const sharpenParamsSchema = z.object({
+  intensity: z.number().min(0.0).max(1.0),
+})
+
+export type SharpenParams = z.infer<typeof sharpenParamsSchema>
+
 export const recipeStepSchema = z.discriminatedUnion('processor', [
   z.object({
     id: z.string().min(1),
@@ -54,6 +97,26 @@ export const recipeStepSchema = z.discriminatedUnion('processor', [
     id: z.string().min(1),
     processor: z.literal('image.compress'),
     params: compressParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('image.adjustLight'),
+    params: adjustLightParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('image.adjustColor'),
+    params: adjustColorParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('image.blackAndWhite'),
+    params: blackAndWhiteParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('image.sharpen'),
+    params: sharpenParamsSchema,
   }),
 ])
 
