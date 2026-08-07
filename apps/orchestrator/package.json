@@ -1,10 +1,10 @@
 {
   "name": "orchestrator",
   "version": "0.0.1",
-  "description": "",
+  "description": "Plexus orchestrator — auth, pipeline DAG resolution, job state machine (NestJS)",
   "author": "",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
