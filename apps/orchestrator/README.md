@@ -17,6 +17,7 @@ execution happens in the Go workers over NATS JetStream.
 | `POST /jobs` | Create and dispatch a job for a pipeline against one `inputRef` (an object-storage key from `POST /uploads/presign`) |
 | `POST /jobs/batch` | Create and dispatch one job per `inputRef` (`{ pipelineId, inputRefs: string[] }`) against the same pipeline — the editor's Apply to Batch flow |
 | `GET /jobs/:id` | Fetch a job and its per-step status |
+| `GET /jobs/:id/events` | Server-Sent Events stream of live job/step progress — a DB snapshot first, then incremental events until the job settles (`TASK-realtime-progress-sse.md`) |
 | `POST /uploads/presign` | Presigned MinIO PUT URL for uploading a file directly to object storage |
 | `GET /uploads/presign-download` | Presigned MinIO GET URL for downloading an object (e.g. a completed step's output) |
 | `POST /export` | Synchronous single-image render, proxied to the Go render server (`workers/cmd/renderserver`) — the editor's export path, distinct from the async job pipeline above |

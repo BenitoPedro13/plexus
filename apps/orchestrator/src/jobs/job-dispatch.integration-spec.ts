@@ -29,7 +29,11 @@ describe('JobDispatchService (integration, real Postgres + real NATS)', () => {
       testDb.dbService,
       testBroker.natsService,
     );
-    jobsService = new JobsService(testDb.dbService, jobDispatchService);
+    jobsService = new JobsService(
+      testDb.dbService,
+      jobDispatchService,
+      testBroker.natsService,
+    );
     pipelinesService = new PipelinesService(testDb.dbService);
     consumer = await testBroker.natsService.durableConsumer(
       JOB_DISPATCH_SUBJECT,

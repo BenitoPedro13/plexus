@@ -4,6 +4,7 @@ import { DbService } from '../db/db.service';
 import { jobs, jobSteps } from '../db/schema';
 import { JOB_DISPATCH_SUBJECT, NatsService } from '../nats/nats.service';
 import type { StepDispatchMessage } from './dispatch-message';
+import { publishJobProgress } from './job-progress-event';
 import { IllegalTransitionError, type JobStatus } from './job-status';
 import {
   transitionJobStatus,
@@ -54,7 +55,19 @@ export class JobDispatchService {
     }
 
     await this.ensureRunning(jobId, job.status);
-    await transitionJobStepStatus(this.dbService.db, next.id, 'RUNNING');
+    const runningStep = await transitionJobStepStatus(
+      this.dbService.db,
+      next.id,
+      'RUNNING',
+    );
+    await publishJobProgress(this.natsService, {
+      scope: 'step',
+      jobId: job.id,
+      jobStepId: runningStep.id,
+      stepId: runningStep.stepId,
+      order: runningStep.order,
+      status: runningStep.status,
+    });
 
     const previous =
       next.order > 0
@@ -79,7 +92,16 @@ export class JobDispatchService {
       return;
     }
     try {
-      await transitionJobStatus(this.dbService.db, jobId, 'RUNNING');
+      const job = await transitionJobStatus(
+        this.dbService.db,
+        jobId,
+        'RUNNING',
+      );
+      await publishJobProgress(this.natsService, {
+        scope: 'job',
+        jobId: job.id,
+        status: job.status,
+      });
     } catch (err) {
       if (!(err instanceof IllegalTransitionError)) {
         throw err;
@@ -89,7 +111,16 @@ export class JobDispatchService {
 
   private async settleComplete(jobId: string): Promise<void> {
     try {
-      await transitionJobStatus(this.dbService.db, jobId, 'COMPLETE');
+      const job = await transitionJobStatus(
+        this.dbService.db,
+        jobId,
+        'COMPLETE',
+      );
+      await publishJobProgress(this.natsService, {
+        scope: 'job',
+        jobId: job.id,
+        status: job.status,
+      });
     } catch (err) {
       // Already settled by an earlier call (e.g. a redelivered result
       // re-running this method) — not an error.

@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Sse } from '@nestjs/common';
+import type { MessageEvent } from '@nestjs/common';
+import type { Observable } from 'rxjs';
 import { CreateBatchJobDto } from './dto/create-batch-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { JobsService } from './jobs.service';
@@ -20,5 +22,10 @@ export class JobsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.jobsService.findOne(id);
+  }
+
+  @Sse(':id/events')
+  events(@Param('id') id: string): Observable<MessageEvent> {
+    return this.jobsService.streamEvents(id);
   }
 }

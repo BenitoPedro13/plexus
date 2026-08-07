@@ -46,7 +46,11 @@ describe('JobResultConsumerService (integration, real Postgres + real NATS)', ()
       testDb.dbService,
       testBroker.natsService,
     );
-    jobsService = new JobsService(testDb.dbService, jobDispatchService);
+    jobsService = new JobsService(
+      testDb.dbService,
+      jobDispatchService,
+      testBroker.natsService,
+    );
     pipelinesService = new PipelinesService(testDb.dbService);
     resultConsumer = new JobResultConsumerService(
       testDb.dbService,
@@ -167,7 +171,11 @@ describe('JobResultConsumerService redelivery (integration, real Postgres + real
       testDb.dbService,
       testBroker.natsService,
     );
-    jobsService = new JobsService(testDb.dbService, jobDispatchService);
+    jobsService = new JobsService(
+      testDb.dbService,
+      jobDispatchService,
+      testBroker.natsService,
+    );
     pipelinesService = new PipelinesService(testDb.dbService);
   }, 120_000);
 
@@ -212,7 +220,12 @@ describe('JobResultConsumerService redelivery (integration, real Postgres + real
     // This time actually process it — safe even though the message
     // describes the same result as (an implicit retry of) the first,
     // unprocessed delivery.
-    await handleStepResult(testDb.dbService, jobDispatchService, second!);
+    await handleStepResult(
+      testDb.dbService,
+      jobDispatchService,
+      testBroker.natsService,
+      second!,
+    );
 
     const job1 = await jobsService.findOne(job.id);
     expect(job1.status).toBe('COMPLETE');
@@ -232,7 +245,12 @@ describe('JobResultConsumerService redelivery (integration, real Postgres + real
     const third = await consumer.next({ expires: 5_000 });
     expect(third).not.toBeNull();
     await expect(
-      handleStepResult(testDb.dbService, jobDispatchService, third!),
+      handleStepResult(
+        testDb.dbService,
+        jobDispatchService,
+        testBroker.natsService,
+        third!,
+      ),
     ).resolves.toBeUndefined();
   });
 });

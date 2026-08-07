@@ -125,7 +125,11 @@ This is the user-facing surface most people will actually judge the product by, 
 - Define and run a pipeline (JSON/YAML) with at least 2 chained steps.
 - Built-in processors: image resize/convert/compress, video transcode/compress via ffmpeg, audio extraction/convert.
 - Job state machine with per-step status persisted in Postgres.
-- Real-time progress via SSE/WebSocket, driven off the same event stream used for job dispatch.
+- Real-time progress via SSE/WebSocket, driven off the same event bus used for job dispatch.
+  **Implemented** (`TASK-realtime-progress-sse.md`, 2026-08-07): `GET /jobs/:id/events`
+  (NestJS `@Sse()`), fed by a second NATS JetStream stream (`PLEXUS_JOB_EVENTS`) — a
+  separate stream from the dispatch/results one, not literally "the same event stream," a
+  correction found while implementing (see `docs/90-deferred-register.md`).
 - Horizontally scalable Go worker pool (run N replicas, jobs distribute automatically).
 - **Editor: non-destructive recipe model** — crop, light, color, filter adjustments stored as parameters, never pixel mutations; full undo/redo from recipe history.
 - **Editor: live client-side preview** via WebGL/WebGPU — adjustments render in-browser with no per-slider server call.
@@ -213,7 +217,7 @@ binary).
 
 1. **Phase 1 — Core pipeline engine**: Orchestrator + single Go worker type + Postgres + NATS. Linear (non-branching) pipelines only. Built-in processors: resize, convert, compress.
 2. **Phase 2 — Editor MVP**: Single-image editor — recipe model, WebGL live preview, curated composite sliders, export. No batch integration yet; this phase proves the UX goal stands on its own.
-3. **Phase 3 — Real DAGs + realtime + Apply to Batch**: Branching/parallel steps, SSE progress stream, presigned upload flow, and wiring the editor's recipe into the pipeline engine so "apply to batch" actually works — this is where the two halves of the project fuse. Presigned upload flow (`TASK-presigned-upload.md`) and Apply to Batch itself (`TASK-apply-to-batch.md`) landed 2026-08-07 — the editor's recipe now runs unmodified as a batch pipeline, polled via `GET /jobs/:id`. Still open: branching/parallel DAGs (pipelines remain linear) and the SSE progress stream (`TASK-realtime-progress-sse.md`) — the batch view polls instead.
+3. **Phase 3 — Real DAGs + realtime + Apply to Batch**: Branching/parallel steps, SSE progress stream, presigned upload flow, and wiring the editor's recipe into the pipeline engine so "apply to batch" actually works — this is where the two halves of the project fuse. Presigned upload flow (`TASK-presigned-upload.md`) and Apply to Batch itself (`TASK-apply-to-batch.md`) landed 2026-08-07 — the editor's recipe now runs unmodified as a batch pipeline. The SSE progress stream (`TASK-realtime-progress-sse.md`) also landed 2026-08-07 — `GET /jobs/:id/events`, backed by its own `PLEXUS_JOB_EVENTS` NATS stream — but isn't wired into the batch view yet, which still polls `GET /jobs/:id` via `apps/web/src/lib/editor/batch-progress.ts`; swapping it to `apps/web/src/lib/jobs/useJobProgress.ts` is a follow-up. Still open: branching/parallel DAGs (pipelines remain linear).
 4. **Phase 4 — Plugin system**: gRPC plugin contract + registry, one real external plugin as proof of concept.
 5. **Phase 5 — Polish/scale story**: autoscaling workers, OpenTelemetry tracing, throughput benchmarks, retry/dead-letter handling, editor presets, inline contextual editing.
 

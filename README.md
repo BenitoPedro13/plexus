@@ -69,7 +69,7 @@ Full design rationale, requirements, and open questions live in
 |---|---|---|
 | 1 — Core pipeline engine | Orchestrator + Go worker + Postgres + NATS, linear pipelines, built-in resize/convert/compress/video/audio processors | ✅ Done |
 | 2 — Editor MVP | Non-destructive recipe model, WebGPU/WebGL2 live preview, curated composite sliders (Light/Color/B&W/Sharpen/Crop), synchronous export | ✅ Done |
-| 3 — Real DAGs + realtime + Apply to Batch | Object storage/presigned upload, shared recipe package, SSE progress stream, batch dispatch | 🚧 In progress |
+| 3 — Real DAGs + realtime + Apply to Batch | Object storage/presigned upload, shared recipe package, SSE progress stream, batch dispatch | 🚧 In progress (branching/parallel DAGs still open) |
 | 4 — Plugin system | gRPC plugin contract + registry, one real external plugin | ⏳ Not started |
 
 Every non-trivial change goes through a task doc in [`docs/tasks/`](docs/tasks) before any

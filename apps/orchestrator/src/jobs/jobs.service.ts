@@ -1,5 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import type { MessageEvent } from '@nestjs/common';
+import type { Consumer, ConsumerMessages } from '@nats-io/jetstream';
 import { asc, eq } from 'drizzle-orm';
+import { Observable } from 'rxjs';
 import { DbService } from '../db/db.service';
 import {
   jobs,
@@ -8,9 +11,11 @@ import {
   type Job,
   type JobStep,
 } from '../db/schema';
+import { NatsService } from '../nats/nats.service';
 import { CreateBatchJobDto } from './dto/create-batch-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { JobDispatchService } from './job-dispatch.service';
+import type { JobProgressEvent } from './job-progress-event';
 import type { JobStatus, JobStepStatus } from './job-status';
 import {
   transitionJobStatus,
@@ -21,11 +26,18 @@ export interface JobWithSteps extends Job {
   steps: JobStep[];
 }
 
+function isTerminalJobStatus(status: JobStatus): boolean {
+  return status === 'COMPLETE' || status === 'FAILED';
+}
+
 @Injectable()
 export class JobsService {
+  private readonly logger = new Logger(JobsService.name);
+
   constructor(
     private readonly dbService: DbService,
     private readonly jobDispatchService: JobDispatchService,
+    private readonly natsService: NatsService,
   ) {}
 
   async create(dto: CreateJobDto): Promise<JobWithSteps> {
@@ -168,5 +180,62 @@ export class JobsService {
 
   async transitionStep(id: string, to: JobStepStatus): Promise<JobStep> {
     return transitionJobStepStatus(this.dbService.db, id, to);
+  }
+
+  // Backs GET /jobs/:id/events (@Sse()). The consumer is created *before*
+  // the DB snapshot is fetched, not after — a DeliverPolicy.New consumer
+  // created after the snapshot could silently miss an event published in
+  // the gap between the two; creating it first means any such event is
+  // instead re-observed as a harmless duplicate of what the snapshot
+  // already shows. NestJS tears this Observable down (calling the returned
+  // function) on unsubscribe, error, complete, and client disconnect alike
+  // (confirmed against @nestjs/core's own router-response-controller.js).
+  streamEvents(jobId: string): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      let stopped = false;
+      let consumer: Consumer | undefined;
+      let messages: ConsumerMessages | undefined;
+
+      const run = async () => {
+        consumer = await this.natsService.ephemeralJobEventsConsumer(jobId);
+
+        const snapshot = await this.findOne(jobId);
+        subscriber.next({
+          data: { scope: 'snapshot', job: snapshot } satisfies JobProgressEvent,
+        });
+
+        if (isTerminalJobStatus(snapshot.status)) {
+          subscriber.complete();
+          return;
+        }
+
+        messages = await consumer.consume();
+        for await (const message of messages) {
+          if (stopped) {
+            break;
+          }
+          const event = message.json<JobProgressEvent>();
+          subscriber.next({ data: event });
+          if (event.scope === 'job' && isTerminalJobStatus(event.status)) {
+            subscriber.complete();
+            break;
+          }
+        }
+      };
+
+      run().catch((err) => subscriber.error(err));
+
+      return () => {
+        stopped = true;
+        messages?.stop();
+        consumer
+          ?.delete()
+          .catch((err) =>
+            this.logger.warn(
+              `Failed to delete ephemeral SSE consumer for job "${jobId}": ${(err as Error).message}`,
+            ),
+          );
+      };
+    });
   }
 }

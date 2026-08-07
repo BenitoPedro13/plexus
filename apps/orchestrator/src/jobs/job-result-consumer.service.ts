@@ -44,6 +44,7 @@ export class JobResultConsumerService implements OnModuleInit, OnModuleDestroy {
         await handleStepResult(
           this.dbService,
           this.jobDispatchService,
+          this.natsService,
           message,
         );
       } catch (err) {

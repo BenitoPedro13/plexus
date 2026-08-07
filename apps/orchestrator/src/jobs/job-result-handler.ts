@@ -1,7 +1,9 @@
 import type { JsMsg } from '@nats-io/jetstream';
 import { DbService } from '../db/db.service';
+import type { NatsService } from '../nats/nats.service';
 import type { StepResultMessage } from './dispatch-message';
 import { JobDispatchService } from './job-dispatch.service';
+import { publishJobProgress } from './job-progress-event';
 import { IllegalTransitionError } from './job-status';
 import {
   transitionJobStatus,
@@ -24,17 +26,31 @@ import {
 export async function handleStepResult(
   dbService: DbService,
   jobDispatchService: JobDispatchService,
+  natsService: NatsService,
   message: JsMsg,
 ): Promise<void> {
   const result = message.json<StepResultMessage>();
 
   try {
-    await transitionJobStepStatus(
+    const step = await transitionJobStepStatus(
       dbService.db,
       result.jobStepId,
       result.status === 'complete' ? 'COMPLETE' : 'FAILED',
       { outputRef: result.outputRef, error: result.error },
     );
+    // Only publish when the transition actually applied — on a redelivered
+    // message that's already COMPLETE/FAILED this throws
+    // IllegalTransitionError instead (caught below) and nothing publishes,
+    // so redelivery never double-publishes a step event.
+    await publishJobProgress(natsService, {
+      scope: 'step',
+      jobId: result.jobId,
+      jobStepId: step.id,
+      stepId: step.stepId,
+      order: step.order,
+      status: step.status,
+      error: step.error ?? undefined,
+    });
   } catch (err) {
     if (!(err instanceof IllegalTransitionError)) {
       throw err;
@@ -43,7 +59,16 @@ export async function handleStepResult(
 
   if (result.status === 'failed') {
     try {
-      await transitionJobStatus(dbService.db, result.jobId, 'FAILED');
+      const job = await transitionJobStatus(
+        dbService.db,
+        result.jobId,
+        'FAILED',
+      );
+      await publishJobProgress(natsService, {
+        scope: 'job',
+        jobId: job.id,
+        status: job.status,
+      });
     } catch (err) {
       if (!(err instanceof IllegalTransitionError)) {
         throw err;
