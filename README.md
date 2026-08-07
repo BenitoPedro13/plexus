@@ -122,13 +122,14 @@ Each app has its own README with endpoints, env vars, and test instructions:
 apps/web            Next.js frontend + WebGPU/WebGL2 editor
 apps/orchestrator    NestJS — auth, DAG resolution, job state machine
 workers/             Go worker pool — built-in processors, export/batch render
+packages/recipe      shared Zod recipe/pipeline step schema — used by apps/web + apps/orchestrator
 infra/               docker-compose.yml — local Postgres, NATS JetStream, MinIO
 docs/                spec, task docs, deferred register
 ```
 
-`proto/` (gRPC plugin contract) and `packages/` (shared TypeScript recipe schema) are
-proposed but not yet scaffolded — each lands in its own phase's task doc when that phase
-actually starts, per [`docs/90-deferred-register.md`](docs/90-deferred-register.md) `D-1`.
+`proto/` (gRPC plugin contract) is proposed but not yet scaffolded — it lands in its own
+task doc when Phase 4 actually starts, per
+[`docs/90-deferred-register.md`](docs/90-deferred-register.md) `D-1`.
 
 ## Testing
 

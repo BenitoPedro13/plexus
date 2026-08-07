@@ -1,0 +1,19 @@
+{
+  "name": "@plexus/recipe",
+  "version": "0.1.0",
+  "description": "Shared Edit Recipe / pipeline step schema (Zod) — single source of truth for apps/web and apps/orchestrator.",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

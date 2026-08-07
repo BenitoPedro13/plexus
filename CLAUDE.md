@@ -297,6 +297,16 @@ change. Documentation is part of the deliverable, not an optional follow-up.
   code reads. They travel together, never separately.
 - **`proto/` contracts and their generated stubs** — a `.proto` change is not done until
   both Go and TS stubs are regenerated and committed per the repo's codegen convention.
+- **READMEs and GitHub repo metadata** — treat these the same way as
+  `docs/90-deferred-register.md`: update them in the same pass, not as a separate later
+  step. The root `README.md` (architecture diagram, stack table, phase status, quickstart)
+  and each scaffolded app's own `README.md` (`apps/web`, `apps/orchestrator`, `workers/`)
+  go stale exactly the way any other doc does — a new package, a renamed endpoint, a status
+  change from "proposed" to "scaffolded" (§4's layout table) all apply here too. If the
+  change also affects what the repo *is* at a glance — new topics/keywords worth
+  discovering it by, a description that no longer matches — update the GitHub repo's own
+  description/topics via `gh repo edit`, not just the files inside it. Grep the READMEs for
+  the same stale-reference check §3.2 already prescribes for other docs.
 
 ### 3.2 How to apply it
 
@@ -319,12 +329,13 @@ metrics exist to catch.
 
 ## 4. Project conventions — polyglot monorepo
 
-**Rule:** One repo, two toolchains, clean boundary. `apps/orchestrator`, `workers/`, and
-`apps/web` are scaffolded (`TASK-scaffold-monorepo.md` Phase 1; `apps/web` via
-`TASK-editor-scaffold.md`, Phase 2 start). `proto/` and `packages/` remain proposed but
-deliberately not yet created — each is scaffolded in its own phase's task doc when that
-phase actually starts (tracked as `D-1` in `docs/90-deferred-register.md`), not up front,
-per §2.0 (framework versions drift while unused).
+**Rule:** One repo, two toolchains, clean boundary. `apps/orchestrator`, `workers/`,
+`apps/web`, and `packages/recipe` are scaffolded (`TASK-scaffold-monorepo.md` Phase 1;
+`apps/web` via `TASK-editor-scaffold.md`, Phase 2 start; `packages/recipe` via
+`TASK-recipe-packages-extraction.md`, Phase 3 start — resolved `D-1`'s `packages/` portion
+and `D-17`). `proto/` remains proposed but deliberately not yet created — scaffolded in its
+own phase's task doc when Phase 4 actually starts, not up front, per §2.0 (framework
+versions drift while unused).
 
 - **Layout (current + proposed):**
 
@@ -333,7 +344,7 @@ per §2.0 (framework versions drift while unused).
   apps/orchestrator   NestJS — auth, DAG resolution, job state machine   — scaffolded
   workers/            Go worker pool — built-in processors, export/batch — scaffolded
   proto/              gRPC/protobuf contracts (plugin contract)          — proposed, Phase 4
-  packages/           shared TypeScript (recipe/pipeline schema, client) — proposed, Phase 3+
+  packages/recipe     shared Zod recipe/pipeline step schema (TS)        — scaffolded
   infra/              docker-compose.yml — local Postgres + NATS JetStream — scaffolded
   docs/               spec, task docs, deferred register                 — exists
   ```
@@ -377,7 +388,7 @@ no-co-author rule is a standing preference, not situational.
 
 | Phase | Rule | Output |
 |-------|------|--------|
-| **Stack** | Next.js + WebGPU editor, NestJS orchestrator, Go workers (ffmpeg/libvips), gRPC plugins, NATS JetStream, Postgres, MinIO/S3 (spec-decided; `apps/orchestrator` + `workers/` + `apps/web` scaffolded, rest phased in) | Polyglot monorepo: `apps/web` (scaffolded), `apps/orchestrator` (scaffolded), `workers/` (scaffolded), `proto/` (proposed), `packages/` (proposed) |
+| **Stack** | Next.js + WebGPU editor, NestJS orchestrator, Go workers (ffmpeg/libvips), gRPC plugins, NATS JetStream, Postgres, MinIO/S3 (spec-decided; `apps/orchestrator` + `workers/` + `apps/web` + `packages/recipe` scaffolded, rest phased in) | Polyglot monorepo: `apps/web` (scaffolded), `apps/orchestrator` (scaffolded), `workers/` (scaffolded), `packages/recipe` (scaffolded), `proto/` (proposed) |
 | **Before** | Write a task document first — including for the initial scaffold | `docs/tasks/TASK-<slug>.md` with: current scenario, planned changes (file by file), why, affected-files table |
 | **During** | Use CLIs / generators / SDKs — ffmpeg/libvips for media, `buf`/protoc for gRPC stubs, framework CLIs for scaffolds; never hand-rolled media processing or hand-synced contracts | Canonical, reproducible output; `[VERIFY: ...]` inline for anything unconfirmed |
 | **After** | Update all affected documentation, including the deferred register; then commit — auto-committed once verified, never with a `Co-Authored-By` trailer (§4.1) | `CLAUDE.md`, `docs/plexus-media-pipeline-spec.md`, `docs/90-deferred-register.md` (`V-xx`/`D-xx`), regenerated proto stubs, `.env.example`, a commit |

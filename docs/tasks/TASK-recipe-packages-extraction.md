@@ -98,3 +98,41 @@ have bolted on later.
 | `docs/plexus-media-pipeline-spec.md` | edit | Core Concepts' Edit Recipe paragraph, path update |
 | `CLAUDE.md` | edit | `packages/` status: proposed → scaffolded |
 | `docs/90-deferred-register.md` | edit | resolve `D-1`'s `packages/` portion and `D-17` |
+
+## Implementação — decisions made that weren't fully pinned above
+
+- `pnpm-workspace.yaml` already had `packages/*` in its globs — no edit needed, contrary to
+  this doc's original assumption.
+- `pnpm create` has no generic scaffold for a plain internal workspace package; used
+  `pnpm init` + hand-set fields (name, private, main/types → `dist/`, `build`: `tsc`),
+  matching CLAUDE.md §2.2 (hand-write only when no generator covers the case).
+- **CommonJS, not `pnpm init`'s default ESM** — `apps/orchestrator` has no `"type":
+  "module"` in its `package.json`, so its `nodenext`-compiled output is CommonJS; a
+  default `"type": "module"` package would fail at runtime the moment orchestrator's
+  compiled CJS tried to statically `import` it (Node can't `require()` pure ESM). Plain
+  `tsc` (`module: commonjs`) was enough — no bundler (`tsup` etc.) needed for a
+  same-repo-only package with no dual ESM/CJS publishing requirement.
+- **`apps/web`'s `src/lib/recipe/schema.ts` became a re-export shim**, not a deleted
+  file with importers repointed — grepped first: 17 files import it, versus 0 externally
+  importing the new package path directly yet. Fewer stale references this way.
+- **`StepDto.params` validation is per-processor for `image.*` only.** The orchestrator's
+  `BUILTIN_PROCESSORS` also lists `video.transcode`/`video.compress`/`audio.extract`/
+  `audio.convert`, which have zero TS schema anywhere (only their Go processors under
+  `workers/internal/processors` define param shape) — they're out of the Edit Recipe
+  unification by construction, since video/audio don't apply to the single-image editor.
+  Went with a custom `class-validator` `@ValidateProcessorParams()` decorator
+  (`registerDecorator`) reading the sibling `processor` field, backed by a new
+  `@plexus/recipe` export `imageProcessorParamsSchemas` (processor id → Zod schema map) —
+  not the `zodToClass`/whole-array-Zod-pass fallback this doc originally floated, since the
+  decorator approach needed no `PipelinesService.create()` changes and kept validation at
+  the DTO boundary where `ValidationPipe` already runs. video/audio `params` still only get
+  the pre-existing `@IsObject()` check.
+- **`schema.test.ts` moved too**, not just `schema.ts` — it existed at
+  `apps/web/src/lib/recipe/schema.test.ts` (67 tests) and wasn't mentioned in this doc's
+  original file list. Moved verbatim to `packages/recipe/src/schema.test.ts`; `apps/web`'s
+  test count dropped from 160 to 93, `packages/recipe` gained the 67, same total.
+- Added `apps/orchestrator/src/pipelines/dto/create-pipeline.dto.spec.ts` (7 tests) — the
+  `pipelines/` module had zero test coverage before this task, and this task's own "Porquê"
+  section commits to the correctness of this exact validation change, so it needed a test
+  proving the actual bug (crop/composite-slider steps rejected) is fixed, not just that
+  `nest build` type-checks.
