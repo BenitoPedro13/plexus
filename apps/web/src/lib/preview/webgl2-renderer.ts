@@ -268,26 +268,53 @@ void main() {
 `
 
 // Mirrors color-math.ts's applyBlackAndWhite -- uParams: intensity,
-// neutrals, tone.
+// neutrals, tone, grain.
+//
+// grainHash/gaussianNoise mirror color-math.ts's hash/grainNoiseNormalized
+// exactly (sin-hash -> Box-Muller) -- a self-contained shader-side
+// pseudo-random stand-in, not an attempt to reproduce libvips'
+// vips_gaussnoise PRNG (grainNoiseSeed, black_and_white.go); see D-32
+// (docs/90-deferred-register.md) for why this is validated statistically
+// rather than via a per-pixel drift.test.ts golden fixture. gl_FragCoord is
+// the same builtin MEAN_DOWNSAMPLE_FRAGMENT_SHADER_SOURCE already uses.
 const BLACK_AND_WHITE_FRAGMENT_SHADER_SOURCE = /* glsl */ `#version 300 es
 precision highp float;
+
+const float GRAIN_MAX_SIGMA_NORMALIZED = 25.0 / 255.0;
 
 uniform vec4 uParams;
 uniform sampler2D uSource;
 in vec2 vUV;
 out vec4 outColor;
 
+float grainHash(float x, float y) {
+  float s = sin(x * 12.9898 + y * 78.233) * 43758.5453123;
+  return fract(s);
+}
+
+float gaussianNoise(vec2 coord, float grain) {
+  float u1 = max(grainHash(coord.x, coord.y), 1e-6);
+  float u2 = grainHash(coord.x + 37.0, coord.y + 17.0);
+  float z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * 3.14159265359 * u2);
+  return z0 * grain * GRAIN_MAX_SIGMA_NORMALIZED;
+}
+
 void main() {
   vec4 c = texture(uSource, vUV);
   float intensity = uParams.x;
   float neutrals = uParams.y;
   float tone = uParams.z;
+  float grain = uParams.w;
   float green = 1.0 / 3.0 + neutrals / 3.0;
   float redBlue = (1.0 - green) / 2.0;
   float gray = redBlue * c.r + green * c.g + redBlue * c.b;
   float toned = gray * (1.0 + tone) - 0.5 * tone;
-  vec3 mixed = clamp(mix(c.rgb, vec3(toned), intensity), vec3(0.0), vec3(1.0));
-  outColor = vec4(mixed, c.a);
+  vec3 mixed = mix(c.rgb, vec3(toned), intensity);
+  if (grain != 0.0) {
+    float noise = gaussianNoise(gl_FragCoord.xy, grain);
+    mixed += vec3(noise);
+  }
+  outColor = vec4(clamp(mixed, vec3(0.0), vec3(1.0)), c.a);
 }
 `
 
@@ -660,8 +687,8 @@ export class WebGL2Renderer implements PreviewRenderer {
         return
       }
       case 'image.blackAndWhite': {
-        const { intensity, neutrals, tone } = step.params
-        this.runContentPass(this.blackAndWhite!, [intensity, neutrals, tone], [input], outputFbo)
+        const { intensity, neutrals, tone, grain } = step.params
+        this.runContentPass(this.blackAndWhite!, [intensity, neutrals, tone, grain], [input], outputFbo)
         return
       }
       case 'image.sharpen': {

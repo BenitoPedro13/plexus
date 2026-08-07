@@ -70,6 +70,18 @@ export function BlackAndWhiteControl({
           onChange={(event) => onChange({ ...value, tone: Number(event.target.value) })}
         />
       </label>
+      <label>
+        Grain ({value.grain.toFixed(2)})
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={value.grain}
+          disabled={!enabled}
+          onChange={(event) => onChange({ ...value, grain: Number(event.target.value) })}
+        />
+      </label>
     </fieldset>
   )
 }

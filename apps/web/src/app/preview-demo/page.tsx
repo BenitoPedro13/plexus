@@ -26,6 +26,7 @@ export default function PreviewDemoPage() {
   const [bwIntensity, setBwIntensity] = useState(0)
   const [neutrals, setNeutrals] = useState(0)
   const [tone, setTone] = useState(0)
+  const [grain, setGrain] = useState(0)
   const [sharpenIntensity, setSharpenIntensity] = useState(0)
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -55,7 +56,7 @@ export default function PreviewDemoPage() {
       {
         id: 'preview-black-and-white',
         processor: 'image.blackAndWhite',
-        params: { intensity: bwIntensity, neutrals, tone, grain: 0 },
+        params: { intensity: bwIntensity, neutrals, tone, grain },
       },
       {
         id: 'preview-sharpen',
@@ -144,6 +145,10 @@ export default function PreviewDemoPage() {
         <label>
           tone ({tone.toFixed(2)})
           <input type="range" min={-1} max={1} step={0.05} value={tone} onChange={(e) => setTone(Number(e.target.value))} />
+        </label>
+        <label>
+          grain ({grain.toFixed(2)})
+          <input type="range" min={0} max={1} step={0.05} value={grain} onChange={(e) => setGrain(Number(e.target.value))} />
         </label>
       </fieldset>
       <fieldset>

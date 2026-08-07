@@ -8,6 +8,7 @@ import {
   collectOrderedAdjustmentSteps,
   computeMeanRGB,
   gaussianKernel1D,
+  grainNoiseNormalized,
   highlightsShadowsL,
   type RGBA,
 } from './color-math'
@@ -214,6 +215,87 @@ describe('applyBlackAndWhite', () => {
     const skewedDown = applyBlackAndWhite(greenish, { intensity: 1, neutrals: -1, tone: 0, grain: 0 })
     // more green weight on a green-heavy pixel -> brighter gray output
     expect(skewedUp.r).toBeGreaterThan(skewedDown.r)
+  })
+
+  // D-32 (docs/90-deferred-register.md): grain's preview noise can never
+  // pixel-match libvips' own vips_gaussnoise PRNG (undocumented, unreverse-
+  // engineered), so fidelity is validated statistically here instead of via
+  // drift.test.ts's per-pixel golden-fixture methodology.
+  it('grain=0 is identity, coord omitted', () => {
+    const result = applyBlackAndWhite(RED, { intensity: 0.5, neutrals: 0, tone: 0, grain: 0 })
+    const baseline = applyBlackAndWhite(RED, { intensity: 0.5, neutrals: 0, tone: 0, grain: 0 }, { x: 3, y: 4 })
+    expect(result).toEqual(baseline)
+  })
+
+  it('grain!==0 without coord throws', () => {
+    expect(() => applyBlackAndWhite(RED, { intensity: 0, neutrals: 0, tone: 0, grain: 0.5 })).toThrow()
+  })
+
+  it('is deterministic: same pixel/params/coord produces the same output', () => {
+    const params = { intensity: 0, neutrals: 0, tone: 0, grain: 0.8 }
+    const a = applyBlackAndWhite(RED, params, { x: 12, y: 34 })
+    const b = applyBlackAndWhite(RED, params, { x: 12, y: 34 })
+    expect(a).toEqual(b)
+  })
+
+  it('different coords produce different noise at the same nonzero grain', () => {
+    const params = { intensity: 0, neutrals: 0, tone: 0, grain: 0.8 }
+    const samples = new Set(
+      Array.from({ length: 20 }, (_, i) => applyBlackAndWhite(RED, params, { x: i, y: i * 2 }).r),
+    )
+    expect(samples.size).toBeGreaterThan(1)
+  })
+
+  it('leaves alpha unchanged regardless of grain', () => {
+    const result = applyBlackAndWhite({ ...RED, a: 0.4 }, { intensity: 0, neutrals: 0, tone: 0, grain: 1 }, { x: 5, y: 5 })
+    expect(result.a).toBe(0.4)
+  })
+})
+
+describe('grainNoiseNormalized (D-32 statistical validation)', () => {
+  const GRAIN_MAX_SIGMA_NORMALIZED = 25.0 / 255.0
+
+  function sampleStats(grain: number): { mean: number; stddev: number } {
+    const values: number[] = []
+    for (let x = 0; x < 100; x++) {
+      for (let y = 0; y < 100; y++) {
+        values.push(grainNoiseNormalized(x, y, grain))
+      }
+    }
+    const n = values.length
+    const mean = values.reduce((sum, v) => sum + v, 0) / n
+    const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / n
+    return { mean, stddev: Math.sqrt(variance) }
+  }
+
+  // Bounds measured from an actual run over the 100x100 grid below (not
+  // guessed ahead of measurement, per CLAUDE.md §0): grain=1.0 observed
+  // mean=-0.0021, stddev=0.098548 (target sigma 0.098039, ratio 1.0052);
+  // grain=0.5 observed mean=-0.0011, stddev=0.049274 (target sigma 0.049020,
+  // ratio 1.0052). Theoretical stderr of the sample-stddev estimate at
+  // n=10000 is sigma/sqrt(2n) (~0.7% relative), consistent with the ~0.5%
+  // deviation actually observed. A 10% relative tolerance comfortably
+  // absorbs that sampling noise and the sin-hash's imperfect (not
+  // textbook-iid) pseudo-randomness while still catching a real scaling
+  // regression (e.g. a stray factor-of-2).
+  it('grain=1.0: mean near 0, stddev near GRAIN_MAX_SIGMA_NORMALIZED', () => {
+    const { mean, stddev } = sampleStats(1.0)
+    expect(Math.abs(mean)).toBeLessThan(0.01)
+    expect(stddev).toBeGreaterThan(GRAIN_MAX_SIGMA_NORMALIZED * 0.9)
+    expect(stddev).toBeLessThan(GRAIN_MAX_SIGMA_NORMALIZED * 1.1)
+  })
+
+  it('grain=0.5: stddev scales linearly (half of grain=1.0)', () => {
+    const { mean, stddev } = sampleStats(0.5)
+    expect(Math.abs(mean)).toBeLessThan(0.01)
+    expect(stddev).toBeGreaterThan(GRAIN_MAX_SIGMA_NORMALIZED * 0.5 * 0.9)
+    expect(stddev).toBeLessThan(GRAIN_MAX_SIGMA_NORMALIZED * 0.5 * 1.1)
+  })
+
+  it('grain=0: no noise at all', () => {
+    const { mean, stddev } = sampleStats(0)
+    expect(mean).toBe(0)
+    expect(stddev).toBe(0)
   })
 })
 

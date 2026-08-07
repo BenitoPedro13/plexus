@@ -293,10 +293,34 @@ fn fragment_main(@builtin(position) fragCoord: vec4f) -> @location(0) vec4f {
 `
 
 // Mirrors color-math.ts's applyBlackAndWhite -- params: intensity,
-// neutrals, tone.
+// neutrals, tone, grain.
+//
+// hash/gaussianNoise mirror color-math.ts's hash/grainNoiseNormalized
+// exactly (sin-hash -> Box-Muller) -- a self-contained shader-side
+// pseudo-random stand-in, not an attempt to reproduce libvips'
+// vips_gaussnoise PRNG (grainNoiseSeed, black_and_white.go); see D-32
+// (docs/90-deferred-register.md) for why this is validated statistically
+// rather than via a per-pixel drift.test.ts golden fixture. `in.position` is
+// VertexOutput's own @builtin(position) field, which -- per WGSL's fragment-
+// stage reinterpretation of that builtin -- carries the framebuffer
+// fragCoord here, the same mechanism MEAN_DOWNSAMPLE_WGSL already relies on.
 const BLACK_AND_WHITE_WGSL =
   CONTENT_VERTEX_BLOCK +
   /* wgsl */ `
+const GRAIN_MAX_SIGMA_NORMALIZED: f32 = 25.0 / 255.0;
+
+fn grainHash(x: f32, y: f32) -> f32 {
+  let s = sin(x * 12.9898 + y * 78.233) * 43758.5453123;
+  return fract(s);
+}
+
+fn gaussianNoise(coord: vec2f, grain: f32) -> f32 {
+  let u1 = max(grainHash(coord.x, coord.y), 1e-6);
+  let u2 = grainHash(coord.x + 37.0, coord.y + 17.0);
+  let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * 3.14159265359 * u2);
+  return z0 * grain * GRAIN_MAX_SIGMA_NORMALIZED;
+}
+
 @group(0) @binding(0) var<uniform> params: vec4f;
 @group(0) @binding(1) var quadSampler: sampler;
 @group(0) @binding(2) var sourceTexture: texture_2d<f32>;
@@ -307,12 +331,17 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
   let intensity = params.x;
   let neutrals = params.y;
   let tone = params.z;
+  let grain = params.w;
   let green = 1.0 / 3.0 + neutrals / 3.0;
   let redBlue = (1.0 - green) / 2.0;
   let gray = redBlue * c.r + green * c.g + redBlue * c.b;
   let toned = gray * (1.0 + tone) - 0.5 * tone;
-  let mixed = clamp(mix(c.rgb, vec3f(toned), intensity), vec3f(0.0), vec3f(1.0));
-  return vec4f(mixed, c.a);
+  var mixed = mix(c.rgb, vec3f(toned), intensity);
+  if (grain != 0.0) {
+    let noise = gaussianNoise(in.position.xy, grain);
+    mixed = mixed + vec3f(noise);
+  }
+  return vec4f(clamp(mixed, vec3f(0.0), vec3f(1.0)), c.a);
 }
 `
 
@@ -644,8 +673,8 @@ export class WebGPURenderer implements PreviewRenderer {
         return
       }
       case 'image.blackAndWhite': {
-        const { intensity, neutrals, tone } = step.params
-        this.encodeUniformPass(encoder, this.blackAndWhitePipeline!, [intensity, neutrals, tone], [input], output)
+        const { intensity, neutrals, tone, grain } = step.params
+        this.encodeUniformPass(encoder, this.blackAndWhitePipeline!, [intensity, neutrals, tone, grain], [input], output)
         return
       }
       case 'image.sharpen': {

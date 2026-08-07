@@ -248,22 +248,82 @@ export function applyAdjustColor(pixel: RGBA, params: AdjustColorParams, mean?: 
   return { ...rgb, a: pixel.a }
 }
 
+// grainMaxSigma (0..255 scale) mirrors workers/internal/processors/
+// black_and_white.go's grainMaxSigma constant exactly -- see that file's doc
+// comment for the "first-pass, not tuned against real photos" status (D-29).
+// Converted to this file's 0..1 convention the same way applyAdjustLight's
+// top-of-file comment describes for Linear1's 0..255 coefficients.
+const GRAIN_MAX_SIGMA_NORMALIZED = 25.0 / 255.0
+
+// A standard GPU pseudo-random hash (sin/fract-based) -- a shader
+// *technique*, not a claim about any external system's behavior, so no
+// CLAUDE.md-§0 [VERIFY] applies. Deliberately does not attempt to reproduce
+// libvips' actual vips_gaussnoise PRNG (seeded by black_and_white.go's
+// grainNoiseSeed) -- that generator is undocumented/unreverse-engineered
+// here, and no shader-side hash could match its specific per-pixel values
+// regardless of tuning. Only the statistical shape (zero mean, sigma scaling
+// with `grain`) is meant to match -- see D-32 (docs/90-deferred-register.md)
+// for why this is validated with a statistical test here rather than
+// drift.test.ts's per-pixel golden-fixture methodology.
+function hash(x: number, y: number): number {
+  const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453123
+  return s - Math.floor(s)
+}
+
+// Box-Muller transform over two decorrelated hash samples of the same
+// coordinate -- standard normal (mean 0, sigma 1), then scaled by `grain` and
+// GRAIN_MAX_SIGMA_NORMALIZED. Deterministic per (x, y): the preview's grain
+// pattern is stable across frames (no time seed), matching a real film-grain
+// look rather than shimmering while a slider is dragged.
+export function grainNoiseNormalized(x: number, y: number, grain: number): number {
+  const u1 = Math.max(hash(x, y), 1e-6)
+  const u2 = hash(x + 37, y + 17)
+  const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+  return z0 * grain * GRAIN_MAX_SIGMA_NORMALIZED
+}
+
 // Mirrors workers/internal/processors/black_and_white.go's
 // grayscaleMatrix(neutrals) weights exactly, then the same post-grayscale
 // Linear1 contrast formula as adjustLight's `contrast`, then a linear blend
 // with the original by `intensity` (Go's img.Linear1(1-intensity, 0) +
-// gray.Linear1(intensity, 0) + img.Add(gray), collapsed to one mix()).
-export function applyBlackAndWhite(pixel: RGBA, params: BlackAndWhiteParams): RGBA {
-  const { intensity, neutrals, tone } = params
+// gray.Linear1(intensity, 0) + img.Add(gray), collapsed to one mix()), then
+// -- when params.grain !== 0 -- additive noise via grainNoiseNormalized,
+// mirroring applyGrain's "applied last, alpha untouched" property
+// (black_and_white.go). `coord` is the pixel's own integer coordinate in the
+// source image (not normalized UV) -- required exactly when grain !== 0,
+// same optional-only-when-active shape as applyAdjustColor's `mean`.
+export function applyBlackAndWhite(
+  pixel: RGBA,
+  params: BlackAndWhiteParams,
+  coord?: { x: number; y: number },
+): RGBA {
+  const { intensity, neutrals, tone, grain } = params
   const green = 1 / 3 + neutrals / 3
   const redBlue = (1 - green) / 2
 
   const gray = redBlue * pixel.r + green * pixel.g + redBlue * pixel.b
   const toned = gray * (1 + tone) - 0.5 * tone
 
-  const mix = (original: number): number => clamp01(original * (1 - intensity) + toned * intensity)
+  const mixed = {
+    r: pixel.r * (1 - intensity) + toned * intensity,
+    g: pixel.g * (1 - intensity) + toned * intensity,
+    b: pixel.b * (1 - intensity) + toned * intensity,
+  }
 
-  return { r: mix(pixel.r), g: mix(pixel.g), b: mix(pixel.b), a: pixel.a }
+  if (grain === 0) {
+    return { r: clamp01(mixed.r), g: clamp01(mixed.g), b: clamp01(mixed.b), a: pixel.a }
+  }
+  if (!coord) {
+    throw new Error('applyBlackAndWhite: coord is required when grain !== 0')
+  }
+
+  const noise = grainNoiseNormalized(coord.x, coord.y, grain)
+  return {
+    r: clamp01(mixed.r + noise),
+    g: clamp01(mixed.g + noise),
+    b: clamp01(mixed.b + noise),
+    a: pixel.a,
+  }
 }
 
 // Unsharp-mask composite half of workers/internal/processors/sharpen.go's
