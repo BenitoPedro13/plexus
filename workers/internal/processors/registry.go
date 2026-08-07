@@ -2,10 +2,12 @@
 // (image.resize, image.convert, image.compress, video.transcode,
 // video.compress, audio.extract, audio.convert) plus the Phase 2 composite
 // processors (image.adjustLight, image.adjustColor, image.blackAndWhite,
-// image.sharpen) that workers/internal/dispatch/handler.go dispatches
-// StepDispatchMessage.Processor to. See docs/tasks/TASK-builtin-processors.md,
-// docs/tasks/TASK-video-audio-processors.md, and
-// docs/tasks/TASK-composite-slider-mapping.md.
+// image.sharpen) and geometry processor (image.crop) that
+// workers/internal/dispatch/handler.go dispatches StepDispatchMessage.Processor
+// to. See docs/tasks/TASK-builtin-processors.md,
+// docs/tasks/TASK-video-audio-processors.md,
+// docs/tasks/TASK-composite-slider-mapping.md, and
+// docs/tasks/TASK-image-crop.md.
 package processors
 
 import "context"
@@ -22,6 +24,7 @@ var registry = map[string]Func{
 	"image.resize":        Resize,
 	"image.convert":       Convert,
 	"image.compress":      Compress,
+	"image.crop":          Crop,
 	"image.adjustLight":   AdjustLight,
 	"image.adjustColor":   AdjustColor,
 	"image.blackAndWhite": BlackAndWhite,

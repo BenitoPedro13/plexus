@@ -8,7 +8,7 @@ import (
 
 func TestLookup(t *testing.T) {
 	for _, id := range []string{
-		"image.resize", "image.convert", "image.compress",
+		"image.resize", "image.convert", "image.compress", "image.crop",
 		"image.adjustLight", "image.adjustColor", "image.blackAndWhite", "image.sharpen",
 		"video.transcode", "video.compress", "audio.extract", "audio.convert",
 	} {

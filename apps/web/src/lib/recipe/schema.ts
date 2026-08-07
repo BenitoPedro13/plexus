@@ -7,6 +7,7 @@ export const imageProcessorId = z.enum([
   'image.resize',
   'image.convert',
   'image.compress',
+  'image.crop',
   'image.adjustLight',
   'image.adjustColor',
   'image.blackAndWhite',
@@ -42,6 +43,28 @@ export const compressParamsSchema = z.object({
 })
 
 export type CompressParams = z.infer<typeof compressParamsSchema>
+
+// Mirrors workers/internal/processors/crop.go's doc comment. Normalized (0.0..1.0)
+// fractions of the source image's dimensions, not absolute pixels — see
+// docs/tasks/TASK-image-crop.md "Porquê" for why: it's what makes the same crop step
+// correct at both live-preview resolution and full-resolution export.
+export const cropParamsSchema = z
+  .object({
+    x: z.number().min(0.0).max(1.0),
+    y: z.number().min(0.0).max(1.0),
+    width: z.number().gt(0.0).max(1.0),
+    height: z.number().gt(0.0).max(1.0),
+  })
+  .refine((v) => v.x + v.width <= 1.0001, {
+    message: 'x + width must not exceed 1.0',
+    path: ['width'],
+  })
+  .refine((v) => v.y + v.height <= 1.0001, {
+    message: 'y + height must not exceed 1.0',
+    path: ['height'],
+  })
+
+export type CropParams = z.infer<typeof cropParamsSchema>
 
 // P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table,
 // extended by docs/tasks/TASK-highlights-shadows-tonelut.md (resolved V-7).
@@ -110,6 +133,11 @@ export const recipeStepSchema = z.discriminatedUnion('processor', [
     id: z.string().min(1),
     processor: z.literal('image.compress'),
     params: compressParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('image.crop'),
+    params: cropParamsSchema,
   }),
   z.object({
     id: z.string().min(1),

@@ -5,13 +5,14 @@ import {
   blackAndWhiteParamsSchema,
   compressParamsSchema,
   convertParamsSchema,
+  cropParamsSchema,
   recipeSchema,
   resizeParamsSchema,
   sharpenParamsSchema,
 } from './schema'
 
 describe('recipeSchema', () => {
-  test('round-trips a recipe with all seven processor types', () => {
+  test('round-trips a recipe with all eight processor types', () => {
     const recipe = {
       name: 'web-optimized',
       steps: [
@@ -49,6 +50,11 @@ describe('recipeSchema', () => {
           id: 'step-7',
           processor: 'image.sharpen' as const,
           params: { intensity: 0.4 },
+        },
+        {
+          id: 'step-8',
+          processor: 'image.crop' as const,
+          params: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
         },
       ],
     }
@@ -322,6 +328,56 @@ describe('blackAndWhiteParamsSchema', () => {
     expect(() =>
       blackAndWhiteParamsSchema.parse({ intensity: 0, neutrals: 0, tone: 0, grain }),
     ).toThrow()
+  })
+})
+
+describe('cropParamsSchema', () => {
+  test('accepts a rect within bounds', () => {
+    expect(cropParamsSchema.parse({ x: 0.1, y: 0.2, width: 0.5, height: 0.6 })).toEqual({
+      x: 0.1,
+      y: 0.2,
+      width: 0.5,
+      height: 0.6,
+    })
+  })
+
+  test('accepts a full-frame rect', () => {
+    expect(cropParamsSchema.parse({ x: 0, y: 0, width: 1, height: 1 })).toEqual({
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+    })
+  })
+
+  test.each(['x', 'y', 'width', 'height'] as const)('requires %s', (key) => {
+    const params: Record<string, number> = { x: 0, y: 0, width: 0.5, height: 0.5 }
+    delete params[key]
+    expect(() => cropParamsSchema.parse(params)).toThrow()
+  })
+
+  test.each([0.0, -0.1])('rejects non-positive width %d', (width) => {
+    expect(() => cropParamsSchema.parse({ x: 0, y: 0, width, height: 0.5 })).toThrow()
+  })
+
+  test.each([0.0, -0.1])('rejects non-positive height %d', (height) => {
+    expect(() => cropParamsSchema.parse({ x: 0, y: 0, width: 0.5, height })).toThrow()
+  })
+
+  test('rejects x + width exceeding 1.0', () => {
+    expect(() => cropParamsSchema.parse({ x: 0.6, y: 0, width: 0.6, height: 0.5 })).toThrow()
+  })
+
+  test('rejects y + height exceeding 1.0', () => {
+    expect(() => cropParamsSchema.parse({ x: 0, y: 0.6, width: 0.5, height: 0.6 })).toThrow()
+  })
+
+  test.each([-0.1, 1.1])('rejects out-of-range x %d', (x) => {
+    expect(() => cropParamsSchema.parse({ x, y: 0, width: 0.1, height: 0.1 })).toThrow()
+  })
+
+  test.each([-0.1, 1.1])('rejects out-of-range y %d', (y) => {
+    expect(() => cropParamsSchema.parse({ x: 0, y, width: 0.1, height: 0.1 })).toThrow()
   })
 })
 
