@@ -9,6 +9,7 @@ import (
 func TestLookup(t *testing.T) {
 	for _, id := range []string{
 		"image.resize", "image.convert", "image.compress",
+		"image.adjustLight", "image.adjustColor", "image.blackAndWhite", "image.sharpen",
 		"video.transcode", "video.compress", "audio.extract", "audio.convert",
 	} {
 		if _, ok := processors.Lookup(id); !ok {

@@ -1,9 +1,11 @@
 // Package processors implements the Phase 1 built-in processors
 // (image.resize, image.convert, image.compress, video.transcode,
-// video.compress, audio.extract, audio.convert) that
-// workers/internal/dispatch/handler.go dispatches StepDispatchMessage.Processor
-// to. See docs/tasks/TASK-builtin-processors.md and
-// docs/tasks/TASK-video-audio-processors.md.
+// video.compress, audio.extract, audio.convert) plus the Phase 2 composite
+// processors (image.adjustLight, image.adjustColor, image.blackAndWhite,
+// image.sharpen) that workers/internal/dispatch/handler.go dispatches
+// StepDispatchMessage.Processor to. See docs/tasks/TASK-builtin-processors.md,
+// docs/tasks/TASK-video-audio-processors.md, and
+// docs/tasks/TASK-composite-slider-mapping.md.
 package processors
 
 import "context"
@@ -17,13 +19,17 @@ import "context"
 type Func func(ctx context.Context, jobStepID, inputRef string, params map[string]interface{}) (outputRef string, err error)
 
 var registry = map[string]Func{
-	"image.resize":    Resize,
-	"image.convert":   Convert,
-	"image.compress":  Compress,
-	"video.transcode": VideoTranscode,
-	"video.compress":  VideoCompress,
-	"audio.extract":   AudioExtract,
-	"audio.convert":   AudioConvert,
+	"image.resize":        Resize,
+	"image.convert":       Convert,
+	"image.compress":      Compress,
+	"image.adjustLight":   AdjustLight,
+	"image.adjustColor":   AdjustColor,
+	"image.blackAndWhite": BlackAndWhite,
+	"image.sharpen":       Sharpen,
+	"video.transcode":     VideoTranscode,
+	"video.compress":      VideoCompress,
+	"audio.extract":       AudioExtract,
+	"audio.convert":       AudioConvert,
 }
 
 // Lookup returns the processor registered for name, if any.

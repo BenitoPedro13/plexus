@@ -39,6 +39,21 @@ func requireIntParamInRange(params map[string]interface{}, key string, min, max 
 	return int(f), nil
 }
 
+// requireFloatParamInRange reads a required float64 param within [min, max].
+// JSON numbers decode as float64 via encoding/json into
+// map[string]interface{}, so no int/float distinction is needed here.
+func requireFloatParamInRange(params map[string]interface{}, key string, min, max float64) (float64, error) {
+	raw, ok := params[key]
+	if !ok {
+		return 0, fmt.Errorf("missing required param %q", key)
+	}
+	f, ok := raw.(float64)
+	if !ok || f < min || f > max {
+		return 0, fmt.Errorf("param %q must be a number between %g and %g, got %v", key, min, max, raw)
+	}
+	return f, nil
+}
+
 // requireStringParam reads a required, non-empty string param.
 func requireStringParam(params map[string]interface{}, key string) (string, error) {
 	raw, ok := params[key]
