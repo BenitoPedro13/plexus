@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except a checked-in documented-defaults example, same convention the
+# root .env.example already uses -- see docs/tasks/TASK-editor-export.md.
+!.env.example
 
 # vercel
 .vercel

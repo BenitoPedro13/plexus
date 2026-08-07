@@ -8,6 +8,7 @@ import { LightControl } from '@/components/editor/LightControl'
 import { SharpenControl } from '@/components/editor/SharpenControl'
 import { PreviewCanvas } from '@/components/PreviewCanvas'
 import { useRecipeHistory } from '@/lib/editor/history'
+import { exportRecipe, triggerDownload } from '@/lib/editor/export'
 import { identityLightParams } from '@/lib/editor/light-blend'
 import type { AdjustColorParams, AdjustLightParams, BlackAndWhiteParams, CropParams, Recipe } from '@/lib/recipe/schema'
 
@@ -101,6 +102,13 @@ function deriveRecipe(state: EditState): Recipe {
 // page is the primary surface. See docs/tasks/TASK-editor-composite-ui.md.
 export default function EditorPage() {
   const [image, setImage] = useState<ImageBitmap | null>(null)
+  // The original uploaded File, kept alongside the decoded ImageBitmap
+  // used for live preview -- export needs the untouched original bytes
+  // (workers/cmd/renderserver's processors read a real image file, not a
+  // canvas re-encode), see docs/tasks/TASK-editor-export.md.
+  const [sourceFile, setSourceFile] = useState<File | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const history = useRecipeHistory<EditState>(initialEditState)
   const live = history.present
 
@@ -124,9 +132,26 @@ export default function EditorPage() {
     if (!file) return
     const bitmap = await createImageBitmap(file)
     setImage(bitmap)
+    setSourceFile(file)
+    setExportError(null)
   }
 
   const recipe = deriveRecipe(live)
+
+  async function handleExport() {
+    if (!sourceFile) return
+    setIsExporting(true)
+    setExportError(null)
+    try {
+      const blob = await exportRecipe(sourceFile, recipe)
+      const baseName = sourceFile.name.replace(/\.[^./]+$/, '') || 'export'
+      triggerDownload(blob, baseName)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   return (
     <main style={{ display: 'flex', gap: '2rem', padding: '1.5rem', alignItems: 'flex-start' }}>
@@ -144,7 +169,11 @@ export default function EditorPage() {
           </button>{' '}
           <button type="button" onClick={history.redo} disabled={!history.canRedo}>
             Redo
+          </button>{' '}
+          <button type="button" onClick={handleExport} disabled={!sourceFile || isExporting}>
+            {isExporting ? 'Exporting…' : 'Export'}
           </button>
+          {exportError && <p style={{ color: 'crimson' }}>{exportError}</p>}
         </div>
         <fieldset onPointerUp={history.commit}>
           <legend>Resize</legend>

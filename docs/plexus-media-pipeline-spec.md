@@ -183,6 +183,20 @@ This is the user-facing surface most people will actually judge the product by, 
 
 **Crop** (grouped with light/color/filter in the spec's P0 non-destructive-recipe bullet) had its Go-side portion resolved 2026-08-07 (`docs/tasks/TASK-image-crop.md`): a new `image.crop` processor via govips's existing `ExtractArea`, taking normalized (`0.0..1.0`) `x`/`y`/`width`/`height` rather than absolute pixels — the same recipe step is then correct at both live-preview resolution and full-resolution export, unlike an absolute-pixel rect chosen against a preview-sized canvas. No research spike was needed (`ExtractArea` is already public in the govips fork, unlike `Tonelut`/`Gaussnoise`'s same-package-fork requirement, `D-24`/`D-28`). Live-preview and editor-UI parity resolved 2026-08-07 (`docs/tasks/TASK-crop-preview-parity.md`, `docs/90-deferred-register.md` `D-33`): both renderers' final-blit UV rect is now produced by `computeGeometryChain` (`apps/web/src/lib/preview/geometry.ts`), which walks `recipe.steps` in true order and composes crop's and resize's transforms — the two do not commute (crop's fractions are relative to whatever image is current at that recipe step), so this generalizes the old resize-only "last one wins" shortcut rather than reusing it as-is. The editor gained a `CropControl.tsx` drag-to-select tool, closing the last open piece of this P0 bullet.
 
+**Editor export** (spec P0: "export produces the same recipe format Plexus pipelines
+consume") resolved 2026-08-07 (`docs/tasks/TASK-editor-export.md`, `docs/90-deferred-register.md`
+new `D-37`): a synchronous, single-image, no-persistence render path, deliberately *not*
+routed through the orchestrator's async DB/NATS job-dispatch machinery — that machinery
+(pipelines/jobs tables, `plexus.jobs.dispatch`) is reserved for Phase 3's "Apply to Batch"
+per the phasing note below ("Phase 2 — ... export. No batch integration yet"). A new Go
+binary, `workers/cmd/renderserver`, exposes `POST /render` (multipart file + recipe JSON),
+chaining the same `processors.Lookup` calls the async path already uses via a new
+`workers/internal/render.RunRecipe`; `apps/orchestrator` gained a thin `POST /export` proxy
+in front of it (keeping the orchestrator as the sole API surface apps/web talks to, where
+auth will eventually gate this per `D-4`); `apps/web/editor` gained an Export button. See
+`D-37` for what this deliberately left open (auth, object storage, containerizing the new
+binary).
+
 ## Suggested Phasing
 
 1. **Phase 1 — Core pipeline engine**: Orchestrator + single Go worker type + Postgres + NATS. Linear (non-branching) pipelines only. Built-in processors: resize, convert, compress.
