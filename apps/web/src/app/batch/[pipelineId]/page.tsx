@@ -1,9 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CircleCheck, CircleX, Loader2 } from 'lucide-react'
+import { CircleCheck, CircleX, Loader2 } from 'lucide-react'
+import { AppHeader, JobsLink } from '@/components/AppHeader'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -132,20 +132,15 @@ export default function BatchProgressPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-        <Link
-          href="/editor"
-          className="flex items-center gap-1 font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Editor
-        </Link>
-        <span className="text-muted-foreground">·</span>
-        <span className="font-mono text-[11px] tracking-[0.08em] text-foreground uppercase">Batch</span>
-        <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
-          {params.pipelineId}
-        </span>
-      </header>
+      <AppHeader
+        crumbs={[{ label: 'Editor', href: '/editor' }, { label: 'Batch' }]}
+        right={
+          <>
+            <span className="truncate font-mono text-[11px] text-muted-foreground">{params.pipelineId}</span>
+            <JobsLink />
+          </>
+        }
+      />
 
       <div className="mx-auto w-full max-w-xl flex-1 px-4 py-6">
         {jobIds.length === 0 ? (

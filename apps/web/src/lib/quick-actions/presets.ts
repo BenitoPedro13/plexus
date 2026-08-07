@@ -1,6 +1,6 @@
 import type { Recipe } from '@/lib/recipe/schema'
 
-export type QuickActionKind = 'video' | 'audio'
+export type QuickActionKind = 'image' | 'video' | 'audio'
 
 export interface QuickActionPreset {
   id: string
@@ -20,9 +20,10 @@ function containerExt(filename: string): string {
   return match ? match[1].toLowerCase() : ''
 }
 
-// Maps a dropped/selected File to which quick-actions flow applies -- null
-// for anything else (e.g. an image, which belongs in /editor instead).
+// Maps a dropped/selected File to which quick-actions catalog applies --
+// null for anything else this app doesn't process at all.
 export function detectKind(file: File): QuickActionKind | null {
+  if (file.type.startsWith('image/')) return 'image'
   if (file.type.startsWith('video/')) return 'video'
   if (file.type.startsWith('audio/')) return 'audio'
   return null
@@ -36,6 +37,35 @@ export function detectKind(file: File): QuickActionKind | null {
 // 20MB" claim would be a promise the processor can't keep (tracked as a new
 // D-xx in docs/90-deferred-register.md).
 export function presetsFor(kind: QuickActionKind, filename: string): QuickActionPreset[] {
+  if (kind === 'image') {
+    return [
+      {
+        id: 'convert-jpeg',
+        label: 'Convert to JPEG',
+        description: 'The format that plays nicely with almost every app and site.',
+        steps: [{ id: 'convert', processor: 'image.convert', params: { format: 'jpeg', quality: 85 } }],
+      },
+      {
+        id: 'convert-png',
+        label: 'Convert to PNG',
+        description: 'Lossless, with transparency support.',
+        steps: [{ id: 'convert', processor: 'image.convert', params: { format: 'png', quality: 85 } }],
+      },
+      {
+        id: 'convert-webp',
+        label: 'Convert to WebP',
+        description: 'A smaller, web-friendly format.',
+        steps: [{ id: 'convert', processor: 'image.convert', params: { format: 'webp', quality: 85 } }],
+      },
+      {
+        id: 'compress',
+        label: 'Compress',
+        description: 'A smaller file with some quality trade-off, same format.',
+        steps: [{ id: 'compress', processor: 'image.compress', params: { quality: 70 } }],
+      },
+    ]
+  }
+
   if (kind === 'video') {
     const container = containerExt(filename)
     const shrinkSteps: Recipe['steps'] = VIDEO_COMPRESS_CONTAINERS.has(container)

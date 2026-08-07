@@ -110,9 +110,11 @@ orchestrator). It loads the repo-root `.env` and exports it to every process it 
 see `scripts/dev.sh`.
 
 `http://localhost:3001` is a real home page (`apps/web/src/app/page.tsx`) — drop a photo,
-video, or audio file, or pick a tool: **Edit a Photo** (`/editor`) for the WebGPU/WebGL2
-photo editor, or **Process Video or Audio** (`/quick-actions`) for a small set of one-click
-presets (shrink a video, convert formats, extract audio) — no live-preview editor for
+video, or audio file, or pick a kind: **Photo**, **Video**, or **Audio**. Each leads to an
+action-first catalog on `/quick-actions` (`?kind=`) showing every named preset for that kind
+(convert formats, compress, shrink a video, extract audio) before asking for a file — the
+photo catalog's "Edit" row is the one path into the full WebGPU/WebGL2 non-destructive
+editor (`/editor`); everything else runs a one-shot preset job. No live-preview editor for
 video/audio, by design (see the spec's Non-Goals).
 
 <details>

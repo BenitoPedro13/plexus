@@ -14,8 +14,26 @@ describe('detectKind', () => {
     expect(detectKind(fileWith('song.mp3', 'audio/mpeg'))).toBe('audio')
   })
 
-  it('returns null for an image file', () => {
-    expect(detectKind(fileWith('photo.jpg', 'image/jpeg'))).toBeNull()
+  it('detects an image file', () => {
+    expect(detectKind(fileWith('photo.jpg', 'image/jpeg'))).toBe('image')
+  })
+
+  it('returns null for an unrecognized file type', () => {
+    expect(detectKind(fileWith('archive.zip', 'application/zip'))).toBeNull()
+  })
+})
+
+describe('presetsFor(image)', () => {
+  it('emits an image.convert step per target format', () => {
+    const presets = presetsFor('image', 'photo.heic')
+    const jpeg = presets.find((preset) => preset.id === 'convert-jpeg')
+    expect(jpeg?.steps).toEqual([{ id: 'convert', processor: 'image.convert', params: { format: 'jpeg', quality: 85 } }])
+  })
+
+  it('emits a single image.compress step', () => {
+    const presets = presetsFor('image', 'photo.jpg')
+    const compress = presets.find((preset) => preset.id === 'compress')
+    expect(compress?.steps).toEqual([{ id: 'compress', processor: 'image.compress', params: { quality: 70 } }])
   })
 })
 

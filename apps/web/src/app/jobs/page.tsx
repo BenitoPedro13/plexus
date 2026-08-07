@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CircleCheck, CircleX, Loader2, Trash2 } from 'lucide-react'
+import { CircleCheck, CircleX, Loader2, Trash2 } from 'lucide-react'
+import { AppHeader } from '@/components/AppHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -130,28 +131,17 @@ export default function JobsPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-        <Link
-          href="/"
-          className="flex items-center gap-1 font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Home
-        </Link>
-        <span className="text-muted-foreground">·</span>
-        <span className="font-mono text-[11px] tracking-[0.08em] text-foreground uppercase">Jobs</span>
-        {jobs.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClear}
-            className="ml-auto font-mono text-[10px] uppercase"
-          >
-            <Trash2 />
-            Clear
-          </Button>
-        )}
-      </header>
+      <AppHeader
+        crumbs={[{ label: 'Home', href: '/' }, { label: 'Jobs' }]}
+        right={
+          jobs.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={handleClear} className="font-mono text-[10px] uppercase">
+              <Trash2 />
+              Clear
+            </Button>
+          )
+        }
+      />
 
       <div className="mx-auto w-full max-w-xl flex-1 px-4 py-6">
         {jobs.length === 0 ? (

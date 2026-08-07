@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Images, Redo2, Undo2 } from 'lucide-react'
+import { AppHeader, JobsLink } from '@/components/AppHeader'
 import { BlackAndWhiteControl } from '@/components/editor/BlackAndWhiteControl'
 import { ColorControl } from '@/components/editor/ColorControl'
 import { CropControl } from '@/components/editor/CropControl'
@@ -207,44 +208,40 @@ export default function EditorPage() {
 
   return (
     <div className="flex h-full min-h-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-[11px] tracking-[0.08em] text-foreground uppercase">
-            Plexus
-          </span>
-          <span className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
-            · Editor
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon-sm" onClick={history.undo} disabled={!history.canUndo} aria-label="Undo">
-            <Undo2 />
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={history.redo} disabled={!history.canRedo} aria-label="Redo">
-            <Redo2 />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isSubmittingBatch}
-            onClick={() => batchFileInputRef.current?.click()}
-          >
-            <Images />
-            {isSubmittingBatch ? 'Applying…' : 'Apply to Batch'}
-          </Button>
-          <input
-            ref={batchFileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="sr-only"
-            onChange={handleBatchFileChange}
-          />
-          <Button size="sm" onClick={handleExport} disabled={!sourceFile || isExporting}>
-            {isExporting ? 'Exporting…' : 'Export'}
-          </Button>
-        </div>
-      </header>
+      <AppHeader
+        crumbs={[{ label: 'Home', href: '/' }, { label: 'Editor' }]}
+        right={
+          <>
+            <Button variant="ghost" size="icon-sm" onClick={history.undo} disabled={!history.canUndo} aria-label="Undo">
+              <Undo2 />
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={history.redo} disabled={!history.canRedo} aria-label="Redo">
+              <Redo2 />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isSubmittingBatch}
+              onClick={() => batchFileInputRef.current?.click()}
+            >
+              <Images />
+              {isSubmittingBatch ? 'Applying…' : 'Apply to Batch'}
+            </Button>
+            <input
+              ref={batchFileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              onChange={handleBatchFileChange}
+            />
+            <Button size="sm" onClick={handleExport} disabled={!sourceFile || isExporting}>
+              {isExporting ? 'Exporting…' : 'Export'}
+            </Button>
+            <JobsLink />
+          </>
+        }
+      />
 
       {exportError && (
         <p className="border-b border-border bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">

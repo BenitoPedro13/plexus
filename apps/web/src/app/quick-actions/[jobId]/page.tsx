@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, CircleCheck, CircleX, Loader2 } from 'lucide-react'
+import { CircleCheck, CircleX, Loader2 } from 'lucide-react'
+import { AppHeader, JobsLink } from '@/components/AppHeader'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -51,17 +51,10 @@ export default function QuickActionsJobPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-        <Link
-          href="/quick-actions"
-          className="flex items-center gap-1 font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase hover:text-foreground"
-        >
-          <ArrowLeft className="size-3.5" />
-          Quick Actions
-        </Link>
-        <span className="text-muted-foreground">·</span>
-        <span className="font-mono text-[11px] tracking-[0.08em] text-foreground uppercase">Job</span>
-      </header>
+      <AppHeader
+        crumbs={[{ label: 'Quick Actions', href: '/quick-actions' }, { label: 'Job' }]}
+        right={<JobsLink />}
+      />
 
       <div className="mx-auto w-full max-w-xl flex-1 px-4 py-10">
         {!job && !error && (

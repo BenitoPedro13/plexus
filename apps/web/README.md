@@ -9,10 +9,10 @@ adjustment writes recipe parameters; nothing is ever applied to pixels until exp
 
 | Route | Purpose |
 |---|---|
-| `/` | Home page — drop a photo/video/audio file (routed to the right tool automatically) or pick one of the two cards below |
-| `/editor` | The primary editor surface — drop/select a photo, adjust via curated Light/Color/Black & White/Sharpen/Crop controls, undo/redo, export, Apply to Batch |
+| `/` | Home page — drop a photo/video/audio file (routed to the right kind's catalog automatically) or pick one of the three kind cards below |
+| `/quick-actions` | Action-first catalog, one per kind (`?kind=image\|video\|audio`): shows every named preset for that kind (convert, compress, shrink, extract audio) before asking for a file; the image catalog's "Edit" row hands off to `/editor` for full non-destructive editing. No raw parameter controls — presets only. |
+| `/editor` | The full editor surface — drop/select a photo, adjust via curated Light/Color/Black & White/Sharpen/Crop controls, undo/redo, export, Apply to Batch |
 | `/batch/[pipelineId]` | Progress/download view for a batch job created by the editor's Apply to Batch flow |
-| `/quick-actions` | Video/audio counterpart to the editor — drop/select a video or audio file, run one named preset (shrink, convert format, extract audio), no raw parameter controls |
 | `/quick-actions/[jobId]` | Progress/download view for a single job created by `/quick-actions` |
 | `/jobs` | Per-browser list of jobs started from `/quick-actions` (tracked client-side in `localStorage` — no server-side job list exists), live status via SSE |
 | `/preview-demo` | Renderer smoke-test harness — raw per-parameter controls against the `PreviewRenderer` (WebGPU/WebGL2) directly, not the curated editor UI |
