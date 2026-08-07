@@ -99,6 +99,49 @@ describe('JobsService (integration, real Postgres + real NATS)', () => {
     expect(partialJob.status).toBe('PARTIAL');
   });
 
+  it('createBatch materializes one job per inputRef against the same pipeline and dispatches each', async () => {
+    const pipeline = await createTwoStepPipeline();
+
+    const batch = await jobsService.createBatch({
+      pipelineId: pipeline.id,
+      inputRefs: ['/tmp/a.jpg', '/tmp/b.jpg', '/tmp/c.jpg'],
+    });
+
+    expect(batch).toHaveLength(3);
+    expect(batch.map((job) => job.pipelineId)).toEqual([
+      pipeline.id,
+      pipeline.id,
+      pipeline.id,
+    ]);
+    expect(batch.map((job) => job.inputRef)).toEqual([
+      '/tmp/a.jpg',
+      '/tmp/b.jpg',
+      '/tmp/c.jpg',
+    ]);
+    // Each job dispatches independently — same "RUNNING with first step
+    // RUNNING" shape as create()'s single-job case.
+    for (const job of batch) {
+      expect(job.status).toBe('RUNNING');
+      expect(job.steps.map((s) => [s.stepId, s.order, s.status])).toEqual([
+        ['resize', 0, 'RUNNING'],
+        ['compress', 1, 'PENDING'],
+      ]);
+    }
+
+    // The jobs are genuinely independent rows, not aliases of one job.
+    const ids = new Set(batch.map((job) => job.id));
+    expect(ids.size).toBe(3);
+  });
+
+  it('createBatch throws NotFoundException against an unknown pipeline', async () => {
+    await expect(
+      jobsService.createBatch({
+        pipelineId: '00000000-0000-0000-0000-000000000000',
+        inputRefs: ['/tmp/a.jpg'],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('throws NotFoundException transitioning an unknown job or step', async () => {
     await expect(
       jobsService.transitionJob(

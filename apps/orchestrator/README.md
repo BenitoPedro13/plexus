@@ -15,6 +15,7 @@ execution happens in the Go workers over NATS JetStream.
 | `POST /pipelines` | Create a pipeline (a `Recipe`'s `steps`, unmodified — this is the concrete proof that an editor recipe and a batch pipeline are the same data structure) |
 | `GET /pipelines/:id` | Fetch a pipeline |
 | `POST /jobs` | Create and dispatch a job for a pipeline against one `inputRef` (an object-storage key from `POST /uploads/presign`) |
+| `POST /jobs/batch` | Create and dispatch one job per `inputRef` (`{ pipelineId, inputRefs: string[] }`) against the same pipeline — the editor's Apply to Batch flow |
 | `GET /jobs/:id` | Fetch a job and its per-step status |
 | `POST /uploads/presign` | Presigned MinIO PUT URL for uploading a file directly to object storage |
 | `GET /uploads/presign-download` | Presigned MinIO GET URL for downloading an object (e.g. a completed step's output) |
@@ -24,7 +25,14 @@ execution happens in the Go workers over NATS JetStream.
 
 See [`.env.example`](../../.env.example) at the repo root — this app reads `DATABASE_URL`,
 `NATS_URL`/`NATS_USER`/`NATS_PASS`, `PORT`, `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/
-`MINIO_SECRET_KEY`/`MINIO_BUCKET`/`MINIO_USE_SSL`, and `RENDER_SERVER_URL`.
+`MINIO_SECRET_KEY`/`MINIO_BUCKET`/`MINIO_USE_SSL`, `RENDER_SERVER_URL`, and optionally
+`CORS_ORIGIN` (comma-separated allow-list; unset reflects any request origin — see
+`src/cors.ts` and `docs/90-deferred-register.md` `D-42`).
+
+Note: nothing in `main.ts` loads `.env` into the process automatically (no `dotenv`/
+`@nestjs/config`) — export the repo-root `.env` into your shell first, e.g.
+`set -a; source ../../.env; set +a` before `pnpm start:dev` (tracked in
+`docs/90-deferred-register.md` `D-43` / `docs/tasks/TASK-dev-run-script.md`).
 
 ## Run
 

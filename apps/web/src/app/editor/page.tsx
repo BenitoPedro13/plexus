@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Redo2, Undo2, UploadCloud } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Images, Redo2, Undo2, UploadCloud } from 'lucide-react'
 import { BlackAndWhiteControl } from '@/components/editor/BlackAndWhiteControl'
 import { ColorControl } from '@/components/editor/ColorControl'
 import { CropControl } from '@/components/editor/CropControl'
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { applyToBatch } from '@/lib/editor/batch'
 import { useRecipeHistory } from '@/lib/editor/history'
 import { exportRecipe, triggerDownload } from '@/lib/editor/export'
 import { identityLightParams } from '@/lib/editor/light-blend'
@@ -108,6 +110,7 @@ function deriveRecipe(state: EditState): Recipe {
 // page is the primary surface. See docs/tasks/TASK-editor-composite-ui.md
 // and, for the visual design pass, docs/tasks/TASK-editor-visual-design.md.
 export default function EditorPage() {
+  const router = useRouter()
   const [image, setImage] = useState<ImageBitmap | null>(null)
   // The original uploaded File, kept alongside the decoded ImageBitmap
   // used for live preview -- export needs the untouched original bytes
@@ -116,7 +119,10 @@ export default function EditorPage() {
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [isSubmittingBatch, setIsSubmittingBatch] = useState(false)
+  const [batchError, setBatchError] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+  const batchFileInputRef = useRef<HTMLInputElement>(null)
   const history = useRecipeHistory<EditState>(initialEditState)
   const live = history.present
 
@@ -172,6 +178,32 @@ export default function EditorPage() {
     }
   }
 
+  // "Apply to Batch" -- the async-pipeline sibling of handleExport's
+  // synchronous single-image path. Uploads every picked file, posts the
+  // *current* recipe unmodified to POST /pipelines, then creates one job
+  // per file (apps/web/src/lib/editor/batch.ts), and navigates to the
+  // progress view. See docs/tasks/TASK-apply-to-batch.md.
+  async function handleApplyToBatchFiles(files: File[]) {
+    if (files.length === 0) return
+    setIsSubmittingBatch(true)
+    setBatchError(null)
+    try {
+      const pipelineName = `Apply to batch (${files.length} file${files.length === 1 ? '' : 's'}) -- ${new Date().toISOString()}`
+      const { pipelineId, jobIds } = await applyToBatch(files, recipe, pipelineName)
+      router.push(`/batch/${pipelineId}?jobs=${jobIds.join(',')}`)
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsSubmittingBatch(false)
+    }
+  }
+
+  async function handleBatchFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    await handleApplyToBatchFiles(files)
+  }
+
   return (
     <div className="flex h-full min-h-screen flex-col bg-background text-foreground">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
@@ -190,6 +222,23 @@ export default function EditorPage() {
           <Button variant="ghost" size="icon-sm" onClick={history.redo} disabled={!history.canRedo} aria-label="Redo">
             <Redo2 />
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isSubmittingBatch}
+            onClick={() => batchFileInputRef.current?.click()}
+          >
+            <Images />
+            {isSubmittingBatch ? 'Applying…' : 'Apply to Batch'}
+          </Button>
+          <input
+            ref={batchFileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            onChange={handleBatchFileChange}
+          />
           <Button size="sm" onClick={handleExport} disabled={!sourceFile || isExporting}>
             {isExporting ? 'Exporting…' : 'Export'}
           </Button>
@@ -199,6 +248,11 @@ export default function EditorPage() {
       {exportError && (
         <p className="border-b border-border bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
           {exportError}
+        </p>
+      )}
+      {batchError && (
+        <p className="border-b border-border bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
+          {batchError}
         </p>
       )}
 

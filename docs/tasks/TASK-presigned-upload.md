@@ -102,7 +102,7 @@ Note inline (and in `D-3`'s resolution) that `MINIO_ENDPOINT` must be reachable 
 whatever issues the presigned PUT request (today: `curl`/tests running on the host,
 eventually: the user's browser) — this is why it's `localhost:9000`, not a Docker-internal
 hostname, and why containerizing the orchestrator/worker later (`D-16`) will need a
-public/internal split. Filed as new `D-39` (see below), not solved here.
+public/internal split. Filed as new `D-41` (see below), not solved here.
 
 ### 3. `workers/internal/storage` (new package) — MinIO client wrapper
 
@@ -196,7 +196,7 @@ global.
 
 - `docs/90-deferred-register.md`: move `D-3` and `D-11` to Resolved with today's date and
   what was decided (self-hosted MinIO; download-to-temp/upload-result wrapper in
-  `dispatch.Handle`). Add new `D-39`: presigned-URL endpoints currently assume the caller
+  `dispatch.Handle`). Add new `D-41`: presigned-URL endpoints currently assume the caller
   (today: `curl`/tests, eventually: the browser) and the orchestrator/worker all resolve
   `MINIO_ENDPOINT` to the same reachable host (`localhost:9000`) — true only because
   nothing in this stack is containerized yet (`D-16`'s same gap). Once orchestrator/worker
@@ -250,5 +250,5 @@ don't hit.
 | `apps/orchestrator/src/app.module.ts` | edit | register `UploadModule` |
 | `apps/orchestrator/src/jobs/dto/create-job.dto.ts` | edit | update `inputRef`'s doc comment: now an object storage key, not a raw path |
 | `apps/orchestrator/package.json` | edit | add `minio` dependency; add `@testcontainers/minio` devDependency |
-| `docs/90-deferred-register.md` | edit | resolve `D-3`, `D-11`; add new `D-39` |
+| `docs/90-deferred-register.md` | edit | resolve `D-3`, `D-11`; add new `D-41` |
 | `docs/plexus-media-pipeline-spec.md` | edit | mark presigned-upload P0 bullet's backend half done |

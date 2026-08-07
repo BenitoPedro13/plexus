@@ -212,10 +212,15 @@ of it — do this, in order:
    current canonical protoc workflow — verify which), the chosen ORM/migration tool's own
    generator — whatever the framework's own generator is. If the CLI can produce it,
    hand-authoring it instead is the wrong default, not a style choice.
-3. **shadcn/ui specifically** (if/when adopted for the frontend): it is not a versioned
-   dependency you install once — components are pulled into the repo via its CLI and the
-   CLI/registry conventions change. Re-check its docs each time you add or update a
-   component rather than reusing a pattern from memory.
+3. **shadcn/ui specifically** (adopted for the frontend, `apps/web/components.json` +
+   `apps/web/src/components/ui`): it is not a versioned dependency you install once —
+   components are pulled into the repo via its CLI and the CLI/registry conventions change.
+   Re-check its docs each time you add or update a component rather than reusing a pattern
+   from memory. **Before any frontend/UI work in `apps/web`** — new pages, new components,
+   or edits to existing ones — load the `frontend-design:frontend-design` skill first and
+   build with shadcn components (`pnpm dlx shadcn@latest add <component>`) rather than
+   hand-rolled markup/CSS. The editor's whole premise is that it must *feel* like Apple
+   Photos (§0); templated or ad-hoc styling works against that goal.
 4. **Take the current major version as authoritative over anything written in this file or
    the spec.** If the framework's own site says a newer major is current and stable, use
    that, and update this file's stack table to match (§3.1).

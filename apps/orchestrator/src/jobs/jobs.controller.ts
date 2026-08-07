@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { CreateBatchJobDto } from './dto/create-batch-job.dto';
 import { CreateJobDto } from './dto/create-job.dto';
 import { JobsService } from './jobs.service';
 
@@ -9,6 +10,11 @@ export class JobsController {
   @Post()
   create(@Body() dto: CreateJobDto) {
     return this.jobsService.create(dto);
+  }
+
+  @Post('batch')
+  createBatch(@Body() dto: CreateBatchJobDto) {
+    return this.jobsService.createBatch(dto);
   }
 
   @Get(':id')

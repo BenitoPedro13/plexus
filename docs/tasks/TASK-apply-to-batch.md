@@ -103,6 +103,66 @@ needs than a client-side loop would be.
 | `apps/web/src/app/editor/page.tsx` | edit | Apply-to-Batch entry point, multi-file upload |
 | `apps/web/src/app/batch/[pipelineId]/page.tsx` | new | per-job progress view + download links |
 | `apps/web/src/lib/editor/batch.ts` | new | pure helpers: build `POST /pipelines` + `POST /jobs/batch` payloads from `Recipe` + uploaded keys |
-| `workers/internal/dispatch/handler_test.go` | edit | integration test: composite processor through async dispatch path |
+| `workers/internal/dispatch/dispatch_test.go` | edit | integration test: composite processor through async dispatch path |
 | `docs/plexus-media-pipeline-spec.md` | edit | mark "Apply to Batch" P1 bullet + recipe/pipeline-unification claim as implemented and tested |
-| `docs/90-deferred-register.md` | edit | log the Drizzle-transaction `[VERIFY]` if unresolved by implementation time |
+| `docs/90-deferred-register.md` | edit | log the Drizzle-transaction `[VERIFY]` if unresolved by implementation time; add `D-40` (permissive CORS) |
+| `apps/orchestrator/src/cors.ts` | new | `corsOptions()` — not in the original plan, see Implementação |
+| `apps/orchestrator/src/cors.spec.ts` | new | unit test for `corsOptions()` |
+| `apps/orchestrator/src/main.ts` | edit | `app.enableCors(corsOptions())` |
+| `apps/orchestrator/test/app.e2e-spec.ts` | edit | e2e proof of a reflected `Access-Control-Allow-Origin` header |
+| `apps/web/src/lib/editor/batch-progress.ts` | new | polling/download helpers for the batch progress page (not itemized as its own file above; folded into the `apps/web/src/app/batch/[pipelineId]/page.tsx` row originally) |
+| `apps/orchestrator/README.md` | edit | add `POST /jobs/batch` to the endpoints table, note `CORS_ORIGIN` |
+
+## Implementação — decisions made that weren't fully pinned above
+
+- **Drizzle transaction `[VERIFY]` resolved: no new API needed.** `create()`'s existing
+  single-job transaction already proved a `db.transaction(async (tx) => ...)` callback
+  runs every query inside it on one held connection — `createBatch()` just loops over
+  `dto.inputRefs` *inside that same callback* rather than opening N transactions. No
+  drizzle-orm/node-postgres API beyond what `create()` already used.
+- **`POST /jobs/batch` dispatches per-job, after the transaction commits, same as
+  `create()`** — one `dispatchNext(job.id)` call per created job, sequentially, for the
+  same reason `create()` defers dispatch: a NATS publish can't be rolled back if dispatch
+  happened inside the (still-open) transaction and something later failed.
+- **`GET /jobs/:id`'s existing response shape needed no changes** — confirmed by direct
+  inspection (`JobsService.findOne`, `apps/orchestrator/src/jobs/jobs.service.ts`): steps
+  are already order-sorted and each carries `outputRef`, so the batch progress page reads
+  `steps.at(-1).outputRef` once that step is `COMPLETE`. No new column, no new endpoint.
+- **Job ids travel in the batch page's URL query string (`/batch/[pipelineId]?jobs=id1,id2,…`),
+  not a new "list jobs by pipeline" endpoint.** `TASK-realtime-progress-sse.md` hadn't
+  landed at implementation time (confirmed by direct inspection: no `useJobProgress`, no
+  `@Sse()` route anywhere), so the page uses a 2s `setTimeout` polling loop per job row
+  (`apps/web/src/app/batch/[pipelineId]/page.tsx`'s `JobRow`) against `GET /jobs/:id`, per
+  the task's own hedge. Swapping in SSE later only touches `JobRow`.
+- **Discovered mid-task, fixed in the same pass, not deferred: the orchestrator had no
+  CORS configuration at all.** Nothing before this task ever called the orchestrator
+  cross-origin from an actual browser (`/export`'s own task never verified it that way
+  either) — the first real browser test of Apply-to-Batch failed every request with a
+  CORS preflight error. Added `apps/orchestrator/src/cors.ts` (`corsOptions()`, reflecting
+  the request `Origin` by default, or a `CORS_ORIGIN` comma-list env var when set) wired
+  into `main.ts` via `app.enableCors(corsOptions())`, plus a unit test and an e2e test
+  (`app.e2e-spec.ts`) proving `Access-Control-Allow-Origin` actually comes back — the
+  e2e suite runs the app the same way `main.ts` does, so it's the one place a missing
+  `enableCors()` call would actually get caught. Origin-reflection without credentials is
+  safe today only because there's no auth yet (spec Open Question) — logged as `D-40` in
+  the deferred register to tighten once auth lands.
+- **Also discovered mid-task: neither the orchestrator nor the Go worker ever load `.env`
+  into their process environment** — `main.ts` has no `dotenv`/`@nestjs/config` import,
+  and the Go worker has no `.env` loader at all. Every prior dev/test run must have relied
+  on ambient shell exports or testcontainers setting vars directly. Left this one
+  **unfixed here** (out of scope for Apply-to-Batch specifically) — tracked as its own
+  task, see `docs/tasks/TASK-dev-run-script.md`.
+- **shadcn additions**: `pnpm dlx shadcn@latest add progress badge card` pulled in
+  `Progress`/`Badge`/`Card`, per CLAUDE.md §2.0's "use the CLI, not a hand-written file"
+  rule (now also explicit about `frontend-design` + shadcn for all `apps/web` UI, added to
+  CLAUDE.md in this same pass). `Card` was pulled but not used in the end — the batch
+  page's rows match the editor's existing flat/hairline-divider visual language instead of
+  `Card`'s rounded/ringed shadcn default, to stay consistent with
+  `docs/tasks/TASK-editor-visual-design.md`'s established direction rather than introduce
+  a second visual idiom.
+- **Not verified in a live browser by the agent** — the user ran the full local stack
+  (`docker compose up`, Go worker, orchestrator, web) and drove the Apply-to-Batch flow
+  themselves; the agent's own verification was build/lint/`*.integration-spec.ts` (real
+  Postgres/NATS/MinIO via testcontainers) + Go `go test` (real NATS/MinIO via
+  testcontainers) across all three stacks, per CLAUDE.md's no-mocking rule, plus the CORS
+  e2e test above once the browser run surfaced the gap.

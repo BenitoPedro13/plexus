@@ -279,6 +279,56 @@ func TestHandle_VideoTranscode(t *testing.T) {
 	}
 }
 
+// TestHandle_CompositeProcessor proves a composite editor processor
+// (image.adjustLight — one of the Phase 3 recipe-packages-extraction ids,
+// see docs/tasks/TASK-recipe-packages-extraction.md and
+// docs/90-deferred-register.md's resolved D-34) runs through the real async
+// dispatch path, not just workers/internal/render.RunRecipe's synchronous
+// export path (docs/tasks/TASK-editor-export.md). Both call the same
+// processors.Lookup registry, but D-34 already found one "worked in one
+// path, never verified in the other" gap once (the WGSL reserved-word
+// regression) — this closes the equivalent gap on the Go/async side, per
+// docs/tasks/TASK-apply-to-batch.md.
+func TestHandle_CompositeProcessor(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBroker(t, ctx)
+	inputKey := seedInput(t, ctx, b.store, fixtureJPEG, "uploads/gradient.jpg")
+
+	in := dispatch.StepDispatchMessage{
+		JobID:     "job-6",
+		JobStepID: "step-6",
+		StepID:    "adjust-light",
+		Processor: "image.adjustLight",
+		Params: map[string]interface{}{
+			"exposure":   0.5,
+			"brightness": 0.1,
+			"contrast":   0.2,
+			"blackPoint": 0.0,
+			"highlights": -0.1,
+			"shadows":    0.1,
+		},
+		InputRef: inputKey,
+		Order:    0,
+	}
+	out := publishAndHandle(t, ctx, b, in)
+
+	if out.Status != dispatch.StepResultComplete {
+		t.Fatalf("expected status %q, got %q (error: %s)", dispatch.StepResultComplete, out.Status, out.Error)
+	}
+	if out.OutputRef == "" {
+		t.Fatal("expected a non-empty outputRef")
+	}
+
+	localOut, cleanup, err := b.store.Download(ctx, out.OutputRef)
+	if err != nil {
+		t.Fatalf("expected outputRef %q to be a fetchable object: %v", out.OutputRef, err)
+	}
+	defer cleanup()
+	if _, err := os.Stat(localOut); err != nil {
+		t.Fatalf("downloaded outputRef %q does not exist locally: %v", out.OutputRef, err)
+	}
+}
+
 func TestHandle_UnknownProcessor(t *testing.T) {
 	ctx := context.Background()
 	b := newTestBroker(t, ctx)

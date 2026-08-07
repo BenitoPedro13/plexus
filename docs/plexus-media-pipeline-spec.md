@@ -138,7 +138,13 @@ This is the user-facing surface most people will actually judge the product by, 
 - Pipeline templates/presets in the UI ("optimize for web", "podcast audio prep") — shared mechanism with editor presets.
 - OpenTelemetry tracing across orchestrator + workers (nice for demonstrating you can debug a distributed system, not just build one).
 - **Editor: presets as the primary entry point** — "pick a look" before "open blank editor," each preset a starter recipe.
-- **Editor: "Apply to batch"** — take a recipe built on one image and run it as a pipeline against many files via the Go backend.
+- **Editor: "Apply to batch"** — take a recipe built on one image and run it as a pipeline
+  against many files via the Go backend. **Resolved 2026-08-07, see
+  `docs/tasks/TASK-apply-to-batch.md`.** `apps/web/src/app/editor/page.tsx`'s Apply to
+  Batch button uploads N files via presigned MinIO PUTs, posts the current recipe
+  unmodified to `POST /pipelines`, then `POST /jobs/batch` creates one job per file against
+  it; `apps/web/src/app/batch/[pipelineId]` polls each job's status and surfaces a download
+  link once complete.
 
 ### P2 — Future Considerations
 - Visual DAG builder in the frontend.
@@ -170,12 +176,18 @@ This is the user-facing surface most people will actually judge the product by, 
 - **Failure handling**: a killed worker mid-job doesn't lose the job (it's picked up by another replica) — demonstrate this explicitly.
 - **Preview latency**: time from slider input to updated preview frame (target: sub-frame, no perceptible lag — this is the metric that determines whether the editor "feels like Apple Photos" or not).
 - **Recipe fidelity**: exported/full-resolution output matches the live preview closely enough that there are no surprises on export — measure and document any drift between the WebGL approximation and the Go ground-truth render.
-- **Reuse proof**: a recipe built by hand on one image successfully runs unmodified as a batch pipeline across many files — the concrete demonstration that the editor and the pipeline engine are actually unified, not just similar.
+- **Reuse proof**: a recipe built by hand on one image successfully runs unmodified as a
+  batch pipeline across many files — the concrete demonstration that the editor and the
+  pipeline engine are actually unified, not just similar. **Demonstrated 2026-08-07**
+  (`docs/tasks/TASK-apply-to-batch.md`): the editor's Apply to Batch flow posts
+  `recipe.steps` to `POST /pipelines` with no translation step, proven by
+  `jobs.service.integration-spec.ts`'s `createBatch` tests and a real cross-origin browser
+  run of the full flow.
 
 ## Open Questions
 
 - Plugin sandboxing: is gRPC-only sufficient for v1, or is WASM worth pulling into P0 given it's more technically interesting? (leaning P2, but worth revisiting once gRPC plumbing is done)
-- Object storage: **resolved 2026-08-07, see `docs/tasks/TASK-presigned-upload.md` and `docs/90-deferred-register.md` D-3.** Self-hosted MinIO, matching every other local service (Postgres, NATS) already running via `infra/docker-compose.yml`. `apps/orchestrator/src/upload` hands out presigned PUT/GET URLs (`POST /uploads/presign`, `GET /uploads/presign-download`) via the `minio` npm client; `workers/internal/storage` (Go, `minio-go/v7`) downloads a step's input object and uploads its output — both MinIO's own SDKs, not the generic AWS SDK, after live research found documented signature-mismatch failures running AWS SDK v3's presigner against MinIO. Resolves the backend half of the P0 "Upload via presigned URL directly to object storage" bullet; the `apps/web` upload/dashboard UI is still open, tracked by `docs/tasks/TASK-apply-to-batch.md`.
+- Object storage: **resolved 2026-08-07, see `docs/tasks/TASK-presigned-upload.md` and `docs/90-deferred-register.md` D-3.** Self-hosted MinIO, matching every other local service (Postgres, NATS) already running via `infra/docker-compose.yml`. `apps/orchestrator/src/upload` hands out presigned PUT/GET URLs (`POST /uploads/presign`, `GET /uploads/presign-download`) via the `minio` npm client; `workers/internal/storage` (Go, `minio-go/v7`) downloads a step's input object and uploads its output — both MinIO's own SDKs, not the generic AWS SDK, after live research found documented signature-mismatch failures running AWS SDK v3's presigner against MinIO. Resolves the backend half of the P0 "Upload via presigned URL directly to object storage" bullet; the `apps/web` upload UI landed 2026-08-07 as part of the editor's Apply to Batch flow (`docs/tasks/TASK-apply-to-batch.md`) — `apps/web/src/lib/editor/batch.ts`'s `uploadFile` presigns then PUTs directly to MinIO from the browser.
 - Auth: reuse your existing auth patterns from Markado/the video converter, or is this a chance to try something new (e.g. OAuth device flow for a future CLI client)?
 - Fallback path: **resolved 2026-08-06, see `docs/90-deferred-register.md` V-1.** WebGPU is solid on Chrome/Edge (default-on since Chrome 113 on Mac/Windows/ChromeOS) and on current-OS Safari, but **Firefox lacks default support on most of its platforms today** (Windows/macOS-Apple-Silicon only, both recent; Linux/Android still in development per the WebGPU standards group's own implementation-status tracker) — this is a live, current-version mainstream-browser gap, not just "older browsers/devices" as originally framed. Decision: the Canvas2D/WebGL2 fallback preview is a **first-class, parallel implementation** built alongside the WebGPU path from the start of Phase 2 preview work, not a rare-case stub — both consume the same recipe data structure, only the rendering backend differs.
 - How much drift is acceptable between the WebGL live-preview approximation and the Go full-resolution render? Some filters may not be feasible to replicate exactly in a fragment shader — decide early which composite controls need pixel-identical parity vs. "close enough."
@@ -201,7 +213,7 @@ binary).
 
 1. **Phase 1 — Core pipeline engine**: Orchestrator + single Go worker type + Postgres + NATS. Linear (non-branching) pipelines only. Built-in processors: resize, convert, compress.
 2. **Phase 2 — Editor MVP**: Single-image editor — recipe model, WebGL live preview, curated composite sliders, export. No batch integration yet; this phase proves the UX goal stands on its own.
-3. **Phase 3 — Real DAGs + realtime + Apply to Batch**: Branching/parallel steps, SSE progress stream, presigned upload flow, and wiring the editor's recipe into the pipeline engine so "apply to batch" actually works — this is where the two halves of the project fuse.
+3. **Phase 3 — Real DAGs + realtime + Apply to Batch**: Branching/parallel steps, SSE progress stream, presigned upload flow, and wiring the editor's recipe into the pipeline engine so "apply to batch" actually works — this is where the two halves of the project fuse. Presigned upload flow (`TASK-presigned-upload.md`) and Apply to Batch itself (`TASK-apply-to-batch.md`) landed 2026-08-07 — the editor's recipe now runs unmodified as a batch pipeline, polled via `GET /jobs/:id`. Still open: branching/parallel DAGs (pipelines remain linear) and the SSE progress stream (`TASK-realtime-progress-sse.md`) — the batch view polls instead.
 4. **Phase 4 — Plugin system**: gRPC plugin contract + registry, one real external plugin as proof of concept.
 5. **Phase 5 — Polish/scale story**: autoscaling workers, OpenTelemetry tracing, throughput benchmarks, retry/dead-letter handling, editor presets, inline contextual editing.
 
