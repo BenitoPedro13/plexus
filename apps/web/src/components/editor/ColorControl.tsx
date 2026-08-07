@@ -1,6 +1,8 @@
 'use client'
 
 import type { AdjustColorParams } from '@/lib/recipe/schema'
+import { InstrumentSlider } from '@/components/editor/ui/Slider'
+import { Section } from '@/components/editor/ui/Section'
 
 interface ColorControlProps {
   value: AdjustColorParams
@@ -17,30 +19,26 @@ interface ColorControlProps {
 // docs/tasks/TASK-color-cast-preview-parity.md (resolved D-30).
 export function ColorControl({ value, onChange, onCommit }: ColorControlProps) {
   return (
-    <fieldset onPointerUp={onCommit}>
-      <legend>Color</legend>
-      <label>
-        Saturation ({value.saturation.toFixed(2)})
-        <input
-          type="range"
-          min={-1}
-          max={1}
-          step={0.05}
-          value={value.saturation}
-          onChange={(event) => onChange({ ...value, saturation: Number(event.target.value) })}
-        />
-      </label>
-      <label>
-        Cast ({value.castStrength.toFixed(2)})
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={value.castStrength}
-          onChange={(event) => onChange({ ...value, castStrength: Number(event.target.value) })}
-        />
-      </label>
-    </fieldset>
+    <Section title="Color">
+      <InstrumentSlider
+        label="Saturation"
+        value={value.saturation}
+        min={-1}
+        max={1}
+        step={0.05}
+        bipolar
+        onChange={(saturation) => onChange({ ...value, saturation })}
+        onCommit={onCommit}
+      />
+      <InstrumentSlider
+        label="Cast"
+        value={value.castStrength}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(castStrength) => onChange({ ...value, castStrength })}
+        onCommit={onCommit}
+      />
+    </Section>
   )
 }

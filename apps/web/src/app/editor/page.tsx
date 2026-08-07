@@ -1,12 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Redo2, Undo2, UploadCloud } from 'lucide-react'
 import { BlackAndWhiteControl } from '@/components/editor/BlackAndWhiteControl'
 import { ColorControl } from '@/components/editor/ColorControl'
 import { CropControl } from '@/components/editor/CropControl'
 import { LightControl } from '@/components/editor/LightControl'
 import { SharpenControl } from '@/components/editor/SharpenControl'
+import { Section } from '@/components/editor/ui/Section'
 import { PreviewCanvas } from '@/components/PreviewCanvas'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useRecipeHistory } from '@/lib/editor/history'
 import { exportRecipe, triggerDownload } from '@/lib/editor/export'
 import { identityLightParams } from '@/lib/editor/light-blend'
@@ -99,7 +105,8 @@ function deriveRecipe(state: EditState): Recipe {
 // The real editor route -- curated Light/Color/B&W/Sharpen controls plus
 // undo/redo, per the spec's P0 editor bullets. apps/web/src/app/preview-demo
 // remains the renderer smoke-test harness (raw params, no history); this
-// page is the primary surface. See docs/tasks/TASK-editor-composite-ui.md.
+// page is the primary surface. See docs/tasks/TASK-editor-composite-ui.md
+// and, for the visual design pass, docs/tasks/TASK-editor-visual-design.md.
 export default function EditorPage() {
   const [image, setImage] = useState<ImageBitmap | null>(null)
   // The original uploaded File, kept alongside the decoded ImageBitmap
@@ -109,6 +116,7 @@ export default function EditorPage() {
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
   const history = useRecipeHistory<EditState>(initialEditState)
   const live = history.present
 
@@ -127,13 +135,24 @@ export default function EditorPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [history])
 
-  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
+  async function loadFile(file: File) {
     const bitmap = await createImageBitmap(file)
     setImage(bitmap)
     setSourceFile(file)
     setExportError(null)
+  }
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    await loadFile(file)
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    setIsDragOver(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) void loadFile(file)
   }
 
   const recipe = deriveRecipe(live)
@@ -154,100 +173,164 @@ export default function EditorPage() {
   }
 
   return (
-    <main style={{ display: 'flex', gap: '2rem', padding: '1.5rem', alignItems: 'flex-start' }}>
-      <section style={{ flex: 1 }}>
-        <h1>Editor</h1>
-        <p>
-          <input type="file" accept="image/*" onChange={handleFileChange} />
-        </p>
-        <PreviewCanvas image={image} recipe={recipe} />
-      </section>
-      <aside style={{ width: 320, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div>
-          <button type="button" onClick={history.undo} disabled={!history.canUndo}>
-            Undo
-          </button>{' '}
-          <button type="button" onClick={history.redo} disabled={!history.canRedo}>
-            Redo
-          </button>{' '}
-          <button type="button" onClick={handleExport} disabled={!sourceFile || isExporting}>
-            {isExporting ? 'Exporting…' : 'Export'}
-          </button>
-          {exportError && <p style={{ color: 'crimson' }}>{exportError}</p>}
+    <div className="flex h-full min-h-screen flex-col bg-background text-foreground">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[11px] tracking-[0.08em] text-foreground uppercase">
+            Plexus
+          </span>
+          <span className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
+            · Editor
+          </span>
         </div>
-        <fieldset onPointerUp={history.commit}>
-          <legend>Resize</legend>
-          <label>
-            width
-            <input
-              type="number"
-              min={1}
-              value={live.width}
-              onChange={(event) => history.setPresent({ ...live, width: Number(event.target.value) })}
-              onBlur={history.commit}
-            />
-          </label>
-          <label>
-            height
-            <input
-              type="number"
-              min={1}
-              value={live.height}
-              onChange={(event) => history.setPresent({ ...live, height: Number(event.target.value) })}
-              onBlur={history.commit}
-            />
-          </label>
-          <label>
-            fit
-            <select
-              value={live.fit}
-              onChange={(event) => {
-                history.setPresent({ ...live, fit: event.target.value as 'inside' | 'cover' })
-                history.commit()
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon-sm" onClick={history.undo} disabled={!history.canUndo} aria-label="Undo">
+            <Undo2 />
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={history.redo} disabled={!history.canRedo} aria-label="Redo">
+            <Redo2 />
+          </Button>
+          <Button size="sm" onClick={handleExport} disabled={!sourceFile || isExporting}>
+            {isExporting ? 'Exporting…' : 'Export'}
+          </Button>
+        </div>
+      </header>
+
+      {exportError && (
+        <p className="border-b border-border bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
+          {exportError}
+        </p>
+      )}
+
+      <div className="flex flex-1 items-stretch">
+        <section className="flex flex-1 items-center justify-center overflow-auto p-8">
+          {image ? (
+            <PreviewCanvas image={image} recipe={recipe} />
+          ) : (
+            <label
+              className="relative flex h-full min-h-96 w-full max-w-2xl cursor-pointer items-center justify-center rounded-sm"
+              onDragOver={(event) => {
+                event.preventDefault()
+                setIsDragOver(true)
               }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
             >
-              <option value="inside">inside</option>
-              <option value="cover">cover</option>
-            </select>
-          </label>
-        </fieldset>
-        <CropControl
-          image={image}
-          value={live.crop}
-          enabled={live.cropEnabled}
-          onEnabledChange={(cropEnabled) => {
-            history.setPresent({ ...live, cropEnabled })
-            history.commit()
-          }}
-          onChange={(crop) => history.setPresent({ ...live, crop })}
-          onCommit={history.commit}
-        />
-        <LightControl
-          value={live.light}
-          onChange={(light) => history.setPresent({ ...live, light })}
-          onCommit={history.commit}
-        />
-        <ColorControl
-          value={live.color}
-          onChange={(color) => history.setPresent({ ...live, color })}
-          onCommit={history.commit}
-        />
-        <BlackAndWhiteControl
-          enabled={live.bwEnabled}
-          value={live.bw}
-          onEnabledChange={(bwEnabled) => {
-            history.setPresent({ ...live, bwEnabled })
-            history.commit()
-          }}
-          onChange={(bw) => history.setPresent({ ...live, bw })}
-          onCommit={history.commit}
-        />
-        <SharpenControl
-          intensity={live.sharpenIntensity}
-          onChange={(sharpenIntensity) => history.setPresent({ ...live, sharpenIntensity })}
-          onCommit={history.commit}
-        />
-      </aside>
-    </main>
+              <input type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
+              <div className="pointer-events-none absolute inset-6">
+                {(['top-0 left-0 border-t-2 border-l-2', 'top-0 right-0 border-t-2 border-r-2', 'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2'] as const).map(
+                  (corner) => (
+                    <span
+                      key={corner}
+                      className={`absolute h-6 w-6 ${corner} ${isDragOver ? 'border-primary' : 'border-muted-foreground/40'}`}
+                    />
+                  ),
+                )}
+              </div>
+              <div className="flex flex-col items-center gap-3 text-center">
+                <UploadCloud
+                  className={isDragOver ? 'size-6 text-primary' : 'size-6 text-muted-foreground'}
+                />
+                <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
+                  Drop a photo, or click to choose
+                </p>
+              </div>
+            </label>
+          )}
+        </section>
+
+        <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-card px-4">
+          <Section
+            title="Resize"
+            headerExtra={
+              <ToggleGroup
+                type="single"
+                value={live.fit}
+                spacing={0}
+                onValueChange={(fit) => {
+                  if (!fit) return
+                  history.setPresent({ ...live, fit: fit as 'inside' | 'cover' })
+                  history.commit()
+                }}
+              >
+                <ToggleGroupItem value="inside" variant="outline" size="sm" className="font-mono text-[10px] uppercase">
+                  Inside
+                </ToggleGroupItem>
+                <ToggleGroupItem value="cover" variant="outline" size="sm" className="font-mono text-[10px] uppercase">
+                  Cover
+                </ToggleGroupItem>
+              </ToggleGroup>
+            }
+          >
+            <div className="flex gap-3" onPointerUp={history.commit}>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Label htmlFor="resize-width" className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
+                  Width
+                </Label>
+                <Input
+                  id="resize-width"
+                  type="number"
+                  min={1}
+                  value={live.width}
+                  className="font-mono tabular-nums"
+                  onChange={(event) => history.setPresent({ ...live, width: Number(event.target.value) })}
+                  onBlur={history.commit}
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Label htmlFor="resize-height" className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
+                  Height
+                </Label>
+                <Input
+                  id="resize-height"
+                  type="number"
+                  min={1}
+                  value={live.height}
+                  className="font-mono tabular-nums"
+                  onChange={(event) => history.setPresent({ ...live, height: Number(event.target.value) })}
+                  onBlur={history.commit}
+                />
+              </div>
+            </div>
+          </Section>
+
+          <CropControl
+            image={image}
+            value={live.crop}
+            enabled={live.cropEnabled}
+            onEnabledChange={(cropEnabled) => {
+              history.setPresent({ ...live, cropEnabled })
+              history.commit()
+            }}
+            onChange={(crop) => history.setPresent({ ...live, crop })}
+            onCommit={history.commit}
+          />
+          <LightControl
+            value={live.light}
+            onChange={(light) => history.setPresent({ ...live, light })}
+            onCommit={history.commit}
+          />
+          <ColorControl
+            value={live.color}
+            onChange={(color) => history.setPresent({ ...live, color })}
+            onCommit={history.commit}
+          />
+          <BlackAndWhiteControl
+            enabled={live.bwEnabled}
+            value={live.bw}
+            onEnabledChange={(bwEnabled) => {
+              history.setPresent({ ...live, bwEnabled })
+            }}
+            onChange={(bw) => history.setPresent({ ...live, bw })}
+            onCommit={history.commit}
+          />
+          <SharpenControl
+            intensity={live.sharpenIntensity}
+            onChange={(sharpenIntensity) => history.setPresent({ ...live, sharpenIntensity })}
+            onCommit={history.commit}
+          />
+        </aside>
+      </div>
+    </div>
   )
 }

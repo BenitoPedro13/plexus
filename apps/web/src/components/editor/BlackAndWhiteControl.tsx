@@ -1,6 +1,9 @@
 'use client'
 
 import type { BlackAndWhiteParams } from '@/lib/recipe/schema'
+import { InstrumentSlider } from '@/components/editor/ui/Slider'
+import { Section } from '@/components/editor/ui/Section'
+import { Switch } from '@/components/ui/switch'
 
 interface BlackAndWhiteControlProps {
   enabled: boolean
@@ -23,65 +26,62 @@ export function BlackAndWhiteControl({
   onCommit,
 }: BlackAndWhiteControlProps) {
   return (
-    <fieldset onPointerUp={onCommit}>
-      <legend>
-        <label>
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => onEnabledChange(event.target.checked)}
-          />
-          Black &amp; White
-        </label>
-      </legend>
-      <label>
-        Intensity ({value.intensity.toFixed(2)})
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={value.intensity}
-          disabled={!enabled}
-          onChange={(event) => onChange({ ...value, intensity: Number(event.target.value) })}
+    <Section
+      title="Black & White"
+      headerExtra={
+        <Switch
+          size="sm"
+          checked={enabled}
+          onCheckedChange={(checked) => {
+            onEnabledChange(checked)
+            onCommit()
+          }}
+          aria-label="Enable black & white"
         />
-      </label>
-      <label>
-        Neutrals ({value.neutrals.toFixed(2)})
-        <input
-          type="range"
-          min={-1}
-          max={1}
-          step={0.05}
-          value={value.neutrals}
-          disabled={!enabled}
-          onChange={(event) => onChange({ ...value, neutrals: Number(event.target.value) })}
-        />
-      </label>
-      <label>
-        Tone ({value.tone.toFixed(2)})
-        <input
-          type="range"
-          min={-1}
-          max={1}
-          step={0.05}
-          value={value.tone}
-          disabled={!enabled}
-          onChange={(event) => onChange({ ...value, tone: Number(event.target.value) })}
-        />
-      </label>
-      <label>
-        Grain ({value.grain.toFixed(2)})
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={value.grain}
-          disabled={!enabled}
-          onChange={(event) => onChange({ ...value, grain: Number(event.target.value) })}
-        />
-      </label>
-    </fieldset>
+      }
+    >
+      <InstrumentSlider
+        label="Intensity"
+        value={value.intensity}
+        min={0}
+        max={1}
+        step={0.05}
+        disabled={!enabled}
+        onChange={(intensity) => onChange({ ...value, intensity })}
+        onCommit={onCommit}
+      />
+      <InstrumentSlider
+        label="Neutrals"
+        value={value.neutrals}
+        min={-1}
+        max={1}
+        step={0.05}
+        bipolar
+        disabled={!enabled}
+        onChange={(neutrals) => onChange({ ...value, neutrals })}
+        onCommit={onCommit}
+      />
+      <InstrumentSlider
+        label="Tone"
+        value={value.tone}
+        min={-1}
+        max={1}
+        step={0.05}
+        bipolar
+        disabled={!enabled}
+        onChange={(tone) => onChange({ ...value, tone })}
+        onCommit={onCommit}
+      />
+      <InstrumentSlider
+        label="Grain"
+        value={value.grain}
+        min={0}
+        max={1}
+        step={0.05}
+        disabled={!enabled}
+        onChange={(grain) => onChange({ ...value, grain })}
+        onCommit={onCommit}
+      />
+    </Section>
   )
 }

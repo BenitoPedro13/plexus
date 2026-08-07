@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { applyLightBlend } from '@/lib/editor/light-blend'
 import type { AdjustLightParams } from '@/lib/recipe/schema'
+import { InstrumentSlider } from '@/components/editor/ui/Slider'
+import { Section } from '@/components/editor/ui/Section'
 
 interface LightControlProps {
   value: AdjustLightParams
@@ -20,92 +22,89 @@ export function LightControl({ value, onChange, onCommit }: LightControlProps) {
   const [masterT, setMasterT] = useState(0)
 
   return (
-    <fieldset onPointerUp={onCommit}>
-      <legend>Light</legend>
-      <label>
-        Light ({masterT.toFixed(2)})
-        <input
-          type="range"
-          min={-1}
-          max={1}
-          step={0.01}
-          value={masterT}
-          onChange={(event) => {
-            const t = Number(event.target.value)
-            setMasterT(t)
-            onChange(applyLightBlend(t))
-          }}
-        />
-      </label>
-      <details>
-        <summary>Adjust manually</summary>
-        <label>
-          Exposure ({value.exposure.toFixed(2)})
-          <input
-            type="range"
+    <Section title="Light">
+      <InstrumentSlider
+        label="Light"
+        value={masterT}
+        min={-1}
+        max={1}
+        step={0.01}
+        bipolar
+        onChange={(t) => {
+          setMasterT(t)
+          onChange(applyLightBlend(t))
+        }}
+        onCommit={onCommit}
+      />
+      <details className="group">
+        <summary className="cursor-pointer font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase select-none [&::-webkit-details-marker]:hidden">
+          <span className="mr-1 inline-block transition-transform group-open:rotate-90">
+            &rsaquo;
+          </span>
+          Adjust manually
+        </summary>
+        <div className="mt-3 flex flex-col gap-3">
+          <InstrumentSlider
+            label="Exposure"
+            value={value.exposure}
             min={-3}
             max={3}
             step={0.05}
-            value={value.exposure}
-            onChange={(event) => onChange({ ...value, exposure: Number(event.target.value) })}
+            bipolar
+            onChange={(exposure) => onChange({ ...value, exposure })}
+            onCommit={onCommit}
           />
-        </label>
-        <label>
-          Brightness ({value.brightness.toFixed(2)})
-          <input
-            type="range"
-            min={-1}
-            max={1}
-            step={0.05}
+          <InstrumentSlider
+            label="Brightness"
             value={value.brightness}
-            onChange={(event) => onChange({ ...value, brightness: Number(event.target.value) })}
-          />
-        </label>
-        <label>
-          Contrast ({value.contrast.toFixed(2)})
-          <input
-            type="range"
             min={-1}
             max={1}
             step={0.05}
-            value={value.contrast}
-            onChange={(event) => onChange({ ...value, contrast: Number(event.target.value) })}
+            bipolar
+            onChange={(brightness) => onChange({ ...value, brightness })}
+            onCommit={onCommit}
           />
-        </label>
-        <label>
-          Black Point ({value.blackPoint.toFixed(2)})
-          <input
-            type="range"
+          <InstrumentSlider
+            label="Contrast"
+            value={value.contrast}
+            min={-1}
+            max={1}
+            step={0.05}
+            bipolar
+            onChange={(contrast) => onChange({ ...value, contrast })}
+            onCommit={onCommit}
+          />
+          <InstrumentSlider
+            label="Black Point"
+            value={value.blackPoint}
             min={0}
             max={1}
             step={0.05}
-            value={value.blackPoint}
-            onChange={(event) => onChange({ ...value, blackPoint: Number(event.target.value) })}
+            onChange={(blackPoint) => onChange({ ...value, blackPoint })}
+            onCommit={onCommit}
           />
-        </label>
-        <label>
-          Highlights ({value.highlights.toFixed(2)})
-          <input
-            type="range"
-            min={-1}
-            max={1}
-            step={0.05}
+          <InstrumentSlider
+            label="Highlights"
             value={value.highlights}
-            onChange={(event) => onChange({ ...value, highlights: Number(event.target.value) })}
-          />
-        </label>
-        <label>
-          Shadows ({value.shadows.toFixed(2)})
-          <input
-            type="range"
             min={-1}
             max={1}
             step={0.05}
-            value={value.shadows}
-            onChange={(event) => onChange({ ...value, shadows: Number(event.target.value) })}
+            bipolar
+            onChange={(highlights) => onChange({ ...value, highlights })}
+            onCommit={onCommit}
           />
-        </label>
+          <InstrumentSlider
+            label="Shadows"
+            value={value.shadows}
+            min={-1}
+            max={1}
+            step={0.05}
+            bipolar
+            onChange={(shadows) => onChange({ ...value, shadows })}
+            onCommit={onCommit}
+          />
+        </div>
       </details>
-    </fieldset>
+    </Section>
   )
 }

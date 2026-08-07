@@ -1,5 +1,8 @@
 'use client'
 
+import { InstrumentSlider } from '@/components/editor/ui/Slider'
+import { Section } from '@/components/editor/ui/Section'
+
 interface SharpenControlProps {
   intensity: number
   onChange: (intensity: number) => void
@@ -8,19 +11,16 @@ interface SharpenControlProps {
 
 export function SharpenControl({ intensity, onChange, onCommit }: SharpenControlProps) {
   return (
-    <fieldset onPointerUp={onCommit}>
-      <legend>Sharpen</legend>
-      <label>
-        Intensity ({intensity.toFixed(2)})
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={intensity}
-          onChange={(event) => onChange(Number(event.target.value))}
-        />
-      </label>
-    </fieldset>
+    <Section title="Sharpen">
+      <InstrumentSlider
+        label="Intensity"
+        value={intensity}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={onChange}
+        onCommit={onCommit}
+      />
+    </Section>
   )
 }

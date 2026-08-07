@@ -84,17 +84,33 @@ export function PreviewCanvas({ image, recipe }: PreviewCanvasProps) {
     rendererRef.current.render(recipe)
   }, [recipe, status.state])
 
+  const message =
+    status.state === 'idle'
+      ? 'Choose an image to preview.'
+      : status.state === 'detecting'
+        ? 'Detecting preview backend…'
+        : status.state === 'unsupported'
+          ? 'This browser supports neither WebGPU nor WebGL2 -- no live preview available.'
+          : status.state === 'error'
+            ? `Preview error: ${status.message}`
+            : null
+  const isAlarm = status.state === 'unsupported' || status.state === 'error'
+
   return (
-    <div>
-      <canvas ref={canvasRef} />
-      <p>
-        {status.state === 'idle' && 'Choose an image to preview.'}
-        {status.state === 'detecting' && 'Detecting preview backend…'}
-        {status.state === 'ready' && `backend: ${status.backend}`}
-        {status.state === 'unsupported' &&
-          'This browser supports neither WebGPU nor WebGL2 -- no live preview available.'}
-        {status.state === 'error' && `Preview error: ${status.message}`}
-      </p>
+    <div className="inline-flex flex-col gap-2">
+      <div className="relative w-fit rounded-sm border border-border bg-secondary p-2">
+        <canvas ref={canvasRef} className="block max-w-full" />
+        {status.state === 'ready' && (
+          <span className="absolute top-3 right-3 rounded-sm bg-background/90 px-1.5 py-0.5 font-mono text-[10px] tracking-[0.08em] text-primary uppercase">
+            {status.backend}
+          </span>
+        )}
+      </div>
+      {message && (
+        <p className={`font-mono text-[11px] ${isAlarm ? 'text-destructive' : 'text-muted-foreground'}`}>
+          {message}
+        </p>
+      )}
     </div>
   )
 }

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { dragRectToCropParams, type DragRect } from '@/lib/editor/crop-drag'
 import type { CropParams } from '@/lib/recipe/schema'
+import { Section } from '@/components/editor/ui/Section'
+import { Switch } from '@/components/ui/switch'
 
 interface CropControlProps {
   image: ImageBitmap | null
@@ -19,8 +21,10 @@ interface CropControlProps {
 const MAX_DISPLAY_WIDTH = 280
 const MAX_DISPLAY_HEIGHT = 280
 
-const RECT_STROKE = '#3b82f6'
-const RECT_FILL = 'rgba(59, 130, 246, 0.15)'
+// Safelight accent (docs/tasks/TASK-editor-visual-design.md's --primary),
+// literal since this is a <canvas> 2D draw call, not CSS.
+const RECT_STROKE = '#E2551B'
+const RECT_FILL = 'rgba(226, 85, 27, 0.18)'
 
 // A self-contained crop-selection tool, deliberately NOT layered on top of
 // PreviewCanvas's live WebGPU/WebGL canvas -- that canvas always shows the
@@ -102,29 +106,34 @@ export function CropControl({ image, value, enabled, onEnabledChange, onChange, 
   }
 
   return (
-    <fieldset>
-      <legend>
-        <label>
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={!image}
-            onChange={(event) => onEnabledChange(event.target.checked)}
-          />
-          Crop
-        </label>
-      </legend>
-      {!image && <p>Choose an image to enable crop.</p>}
+    <Section
+      title="Crop"
+      headerExtra={
+        <Switch
+          size="sm"
+          checked={enabled}
+          disabled={!image}
+          onCheckedChange={onEnabledChange}
+          aria-label="Enable crop"
+        />
+      }
+    >
+      {!image && (
+        <p className="font-mono text-[11px] text-muted-foreground">
+          Choose an image to enable crop.
+        </p>
+      )}
       {image && (
         <canvas
           ref={canvasRef}
+          className="rounded-sm border border-border bg-secondary"
           style={{ cursor: enabled ? 'crosshair' : 'default', touchAction: 'none' }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         />
       )}
-    </fieldset>
+    </Section>
   )
 }
 
