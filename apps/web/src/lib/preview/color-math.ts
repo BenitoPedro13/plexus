@@ -79,13 +79,13 @@ function labFInverse(t: number): number {
   return t3 > LAB_EPSILON ? t3 : (t - 4 / 29) / LAB_KAPPA
 }
 
-interface Lab {
+export interface Lab {
   l: number
   a: number
   b: number
 }
 
-function rgbToLab(r: number, g: number, b: number): Lab {
+export function rgbToLab(r: number, g: number, b: number): Lab {
   const lr = srgbToLinear(r)
   const lg = srgbToLinear(g)
   const lb = srgbToLinear(b)
