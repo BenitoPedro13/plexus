@@ -3,17 +3,20 @@
 import { useEffect, useState } from 'react'
 import { BlackAndWhiteControl } from '@/components/editor/BlackAndWhiteControl'
 import { ColorControl } from '@/components/editor/ColorControl'
+import { CropControl } from '@/components/editor/CropControl'
 import { LightControl } from '@/components/editor/LightControl'
 import { SharpenControl } from '@/components/editor/SharpenControl'
 import { PreviewCanvas } from '@/components/PreviewCanvas'
 import { useRecipeHistory } from '@/lib/editor/history'
 import { identityLightParams } from '@/lib/editor/light-blend'
-import type { AdjustColorParams, AdjustLightParams, BlackAndWhiteParams, Recipe } from '@/lib/recipe/schema'
+import type { AdjustColorParams, AdjustLightParams, BlackAndWhiteParams, CropParams, Recipe } from '@/lib/recipe/schema'
 
 interface EditState {
   width: number
   height: number
   fit: 'inside' | 'cover'
+  cropEnabled: boolean
+  crop: CropParams | null
   light: AdjustLightParams
   color: AdjustColorParams
   bwEnabled: boolean
@@ -28,6 +31,8 @@ const initialEditState: EditState = {
   width: 400,
   height: 400,
   fit: 'inside',
+  cropEnabled: false,
+  crop: null,
   light: identityLightParams,
   color: identityColorParams,
   bwEnabled: false,
@@ -38,14 +43,26 @@ const initialEditState: EditState = {
 // Only emits a composite step when it differs from identity (B&W: when
 // enabled at all) -- keeps hand-edited recipes minimal instead of a fixed
 // five-step stack of mostly no-ops, per docs/tasks/TASK-editor-composite-ui.md.
+// crop, when enabled and a rect has actually been drawn, is emitted
+// *before* resize -- "select a region of the original, then thumbnail-fit
+// that region" -- see docs/tasks/TASK-crop-preview-parity.md "Porquê" for
+// why this recipe order is also what makes computeGeometryChain's
+// order-sensitivity load-bearing. Disabling the tool (cropEnabled = false)
+// stops emitting the step without discarding the drawn rect, same
+// enabled/value split BlackAndWhiteControl already uses -- re-enabling
+// shows the previous selection again rather than forcing a redraw.
 function deriveRecipe(state: EditState): Recipe {
-  const steps: Recipe['steps'] = [
-    {
-      id: 'resize',
-      processor: 'image.resize',
-      params: { width: state.width, height: state.height, fit: state.fit },
-    },
-  ]
+  const steps: Recipe['steps'] = []
+
+  if (state.cropEnabled && state.crop) {
+    steps.push({ id: 'crop', processor: 'image.crop', params: state.crop })
+  }
+
+  steps.push({
+    id: 'resize',
+    processor: 'image.resize',
+    params: { width: state.width, height: state.height, fit: state.fit },
+  })
 
   const { light } = state
   if (
@@ -165,6 +182,17 @@ export default function EditorPage() {
             </select>
           </label>
         </fieldset>
+        <CropControl
+          image={image}
+          value={live.crop}
+          enabled={live.cropEnabled}
+          onEnabledChange={(cropEnabled) => {
+            history.setPresent({ ...live, cropEnabled })
+            history.commit()
+          }}
+          onChange={(crop) => history.setPresent({ ...live, crop })}
+          onCommit={history.commit}
+        />
         <LightControl
           value={live.light}
           onChange={(light) => history.setPresent({ ...live, light })}

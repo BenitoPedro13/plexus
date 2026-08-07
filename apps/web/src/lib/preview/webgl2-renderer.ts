@@ -1,6 +1,6 @@
 import type { Recipe } from '@/lib/recipe/schema'
 import { collectOrderedAdjustmentSteps, gaussianKernel1D, type AdjustmentStep } from './color-math'
-import { computeFitGeometry, computeMeanChainSizes, findLastResizeStep, type ImageDimensions } from './geometry'
+import { computeGeometryChain, computeMeanChainSizes, type ImageDimensions } from './geometry'
 import type { PreviewRenderer } from './types'
 
 // Radius=2 (5-tap) at the Go processor's fixed sigma=0.5
@@ -19,7 +19,9 @@ const GAUSSIAN_WEIGHTS = gaussianKernel1D(0.5, GAUSSIAN_RADIUS)
 // handled by localUV instead); not yet cross-checked on Firefox/Safari's
 // WebGL2 implementations. Used only for the *final* blit into the visible
 // canvas -- content-adjustment passes below use CONTENT_VERTEX_SHADER
-// (no crop, 1:1 with the source image's own dimensions).
+// (no crop, 1:1 with the source image's own dimensions). The uniform rect
+// itself now comes from computeGeometryChain (composes crop + resize in
+// recipe order, TASK-crop-preview-parity.md), not computeFitGeometry alone.
 const BLIT_VERTEX_SHADER_SOURCE = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 aPosition;
 layout(location = 1) in vec2 aLocalUV;
@@ -725,14 +727,7 @@ export class WebGL2Renderer implements PreviewRenderer {
       writeToA = !writeToA
     }
 
-    const resizeStep = findLastResizeStep(recipe)
-    const geometry = resizeStep
-      ? computeFitGeometry(this.sourceDimensions, resizeStep.params)
-      : {
-          outputWidth: this.sourceDimensions.width,
-          outputHeight: this.sourceDimensions.height,
-          sourceUV: { u0: 0, v0: 0, u1: 1, v1: 1 },
-        }
+    const geometry = computeGeometryChain(this.sourceDimensions, recipe)
 
     this.canvas.width = Math.max(1, Math.round(geometry.outputWidth))
     this.canvas.height = Math.max(1, Math.round(geometry.outputHeight))

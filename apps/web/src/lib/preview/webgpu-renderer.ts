@@ -1,7 +1,7 @@
 /// <reference types="@webgpu/types" />
 import type { Recipe } from '@/lib/recipe/schema'
 import { collectOrderedAdjustmentSteps, gaussianKernel1D, type AdjustmentStep } from './color-math'
-import { computeFitGeometry, computeMeanChainSizes, findLastResizeStep, type ImageDimensions } from './geometry'
+import { computeGeometryChain, computeMeanChainSizes, type ImageDimensions } from './geometry'
 import type { PreviewRenderer } from './types'
 
 // Radius=2 (5-tap) at the Go processor's fixed sigma=0.5
@@ -66,8 +66,9 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
 // a plain full-canvas quad with UV 0..1, no crop -- these passes run
 // elementwise against off-screen textures sized to the *source* image's
 // dimensions, matching Go where these processors run before/independent of
-// resize's geometric resampling (D-21, docs/90-deferred-register.md: resize
-// is still applied only as the final blit's UV rect, not a real pass in
+// geometry's resampling (D-21, docs/90-deferred-register.md: resize --and,
+// per TASK-crop-preview-parity.md, crop-- are still applied only as the
+// final blit's composed UV rect via computeGeometryChain, not a real pass in
 // this ordered pipeline).
 const CONTENT_VERTEX_BLOCK = /* wgsl */ `
 struct VertexOutput {
@@ -712,14 +713,7 @@ export class WebGPURenderer implements PreviewRenderer {
       writeToA = !writeToA
     }
 
-    const resizeStep = findLastResizeStep(recipe)
-    const geometry = resizeStep
-      ? computeFitGeometry(this.sourceDimensions, resizeStep.params)
-      : {
-          outputWidth: this.sourceDimensions.width,
-          outputHeight: this.sourceDimensions.height,
-          sourceUV: { u0: 0, v0: 0, u1: 1, v1: 1 },
-        }
+    const geometry = computeGeometryChain(this.sourceDimensions, recipe)
 
     const canvas = this.context.canvas
     if (canvas instanceof HTMLCanvasElement) {
