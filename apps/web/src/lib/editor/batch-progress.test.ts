@@ -46,12 +46,12 @@ describe('fetchJob', () => {
 })
 
 describe('isTerminalJobStatus', () => {
-  it('treats COMPLETE and FAILED as terminal, everything else as not', () => {
+  it('treats COMPLETE, FAILED, and PARTIAL as terminal, QUEUED/RUNNING as not', () => {
     expect(isTerminalJobStatus('COMPLETE')).toBe(true)
     expect(isTerminalJobStatus('FAILED')).toBe(true)
+    expect(isTerminalJobStatus('PARTIAL')).toBe(true)
     expect(isTerminalJobStatus('QUEUED')).toBe(false)
     expect(isTerminalJobStatus('RUNNING')).toBe(false)
-    expect(isTerminalJobStatus('PARTIAL')).toBe(false)
   })
 })
 

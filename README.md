@@ -109,6 +109,12 @@ JetStream, MinIO — waits for all three to report healthy), the orchestrator at
 orchestrator). It loads the repo-root `.env` and exports it to every process it starts —
 see `scripts/dev.sh`.
 
+`http://localhost:3001` is a real home page (`apps/web/src/app/page.tsx`) — drop a photo,
+video, or audio file, or pick a tool: **Edit a Photo** (`/editor`) for the WebGPU/WebGL2
+photo editor, or **Process Video or Audio** (`/quick-actions`) for a small set of one-click
+presets (shrink a video, convert formats, extract audio) — no live-preview editor for
+video/audio, by design (see the spec's Non-Goals).
+
 <details>
 <summary>Running pieces individually</summary>
 

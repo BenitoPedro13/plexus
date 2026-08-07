@@ -79,6 +79,32 @@ export async function createPipelineFromRecipe(
   return res.json()
 }
 
+interface JobResponse {
+  id: string
+}
+
+// Calls POST /jobs (singular) -- creates and dispatches one job for one
+// pipeline against one already-uploaded inputRef. Mirrors createBatchJobs's
+// shape/error handling; used by the quick-actions screen
+// (docs/tasks/TASK-quick-actions-screen.md), which processes a single
+// video/audio file per run rather than a batch of many.
+export async function createJob(
+  pipelineId: string,
+  inputRef: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<JobResponse> {
+  const res = await fetchImpl(orchestratorUrl('/jobs'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pipelineId, inputRef }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`create job failed (${res.status}): ${text || res.statusText}`)
+  }
+  return res.json()
+}
+
 interface BatchJobResponse {
   id: string
 }

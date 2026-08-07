@@ -118,6 +118,67 @@ export const sharpenParamsSchema = z.object({
 
 export type SharpenParams = z.infer<typeof sharpenParamsSchema>
 
+// video.*/audio.* have no editor equivalent (no single-image live-preview
+// control uses them) but do have real Go processors
+// (workers/internal/processors/{video_compress,video_transcode,audio_extract,
+// audio_convert}.go) reachable via the quick-actions screen
+// (docs/tasks/TASK-quick-actions-screen.md). Kept as separate enums from
+// imageProcessorId rather than folded in, since callers that only care about
+// image steps (the editor's own recipe-building code) still want to narrow
+// to just those 8.
+export const videoProcessorId = z.enum(['video.transcode', 'video.compress'])
+export type VideoProcessorId = z.infer<typeof videoProcessorId>
+
+export const audioProcessorId = z.enum(['audio.extract', 'audio.convert'])
+export type AudioProcessorId = z.infer<typeof audioProcessorId>
+
+export const builtinProcessorId = z.enum([
+  ...imageProcessorId.options,
+  ...videoProcessorId.options,
+  ...audioProcessorId.options,
+])
+export type BuiltinProcessorId = z.infer<typeof builtinProcessorId>
+
+// Mirrors workers/internal/processors/video_transcode.go's doc comment.
+export const videoTranscodeParamsSchema = z.object({
+  format: z.enum(['mp4', 'webm']),
+  quality: z.number().int().min(1).max(100).default(75),
+})
+
+export type VideoTranscodeParams = z.infer<typeof videoTranscodeParamsSchema>
+
+// Mirrors workers/internal/processors/video_compress.go's doc comment. No
+// format field: like image.compress, compress never changes the container —
+// it's read from the input's file extension and must already be mp4/webm.
+export const videoCompressParamsSchema = z.object({
+  quality: z.number().int().min(1).max(100),
+})
+
+export type VideoCompressParams = z.infer<typeof videoCompressParamsSchema>
+
+// Mirrors workers/internal/processors/audio_extract.go's doc comment. "wav"
+// is deliberately not a valid format here (Go processor rejects it) —
+// extracting to lossless PCM from a video's audio track isn't supported,
+// use audio.convert on the extracted file instead.
+export const audioExtractParamsSchema = z.object({
+  format: z.enum(['mp3', 'aac', 'opus']),
+  bitrate: z.number().int().min(32).max(320).default(128),
+})
+
+export type AudioExtractParams = z.infer<typeof audioExtractParamsSchema>
+
+// Mirrors workers/internal/processors/audio_convert.go's doc comment.
+// bitrate is ignored by the Go processor when format is "wav" (lossless PCM
+// has no bitrate knob) but kept required-with-default here rather than
+// conditionally optional — same shape tradeoff already accepted for
+// convertParamsSchema's png quality.
+export const audioConvertParamsSchema = z.object({
+  format: z.enum(['mp3', 'aac', 'opus', 'wav']),
+  bitrate: z.number().int().min(32).max(320).default(128),
+})
+
+export type AudioConvertParams = z.infer<typeof audioConvertParamsSchema>
+
 export const recipeStepSchema = z.discriminatedUnion('processor', [
   z.object({
     id: z.string().min(1),
@@ -159,6 +220,26 @@ export const recipeStepSchema = z.discriminatedUnion('processor', [
     processor: z.literal('image.sharpen'),
     params: sharpenParamsSchema,
   }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('video.transcode'),
+    params: videoTranscodeParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('video.compress'),
+    params: videoCompressParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('audio.extract'),
+    params: audioExtractParamsSchema,
+  }),
+  z.object({
+    id: z.string().min(1),
+    processor: z.literal('audio.convert'),
+    params: audioConvertParamsSchema,
+  }),
 ])
 
 export type RecipeStep = z.infer<typeof recipeStepSchema>
@@ -191,3 +272,15 @@ export const imageProcessorParamsSchemas = {
   'image.blackAndWhite': blackAndWhiteParamsSchema,
   'image.sharpen': sharpenParamsSchema,
 } as const satisfies Record<ImageProcessorId, z.ZodTypeAny>
+
+// Superset of imageProcessorParamsSchemas covering every builtin processor —
+// what apps/orchestrator's create-pipeline.dto.ts validates params against,
+// replacing its previous plain-object fallback for video/audio (which had no
+// schema here until docs/tasks/TASK-quick-actions-screen.md).
+export const builtinProcessorParamsSchemas = {
+  ...imageProcessorParamsSchemas,
+  'video.transcode': videoTranscodeParamsSchema,
+  'video.compress': videoCompressParamsSchema,
+  'audio.extract': audioExtractParamsSchema,
+  'audio.convert': audioConvertParamsSchema,
+} as const satisfies Record<BuiltinProcessorId, z.ZodTypeAny>

@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Images, Redo2, Undo2, UploadCloud } from 'lucide-react'
+import { Images, Redo2, Undo2 } from 'lucide-react'
 import { BlackAndWhiteControl } from '@/components/editor/BlackAndWhiteControl'
 import { ColorControl } from '@/components/editor/ColorControl'
 import { CropControl } from '@/components/editor/CropControl'
 import { LightControl } from '@/components/editor/LightControl'
 import { SharpenControl } from '@/components/editor/SharpenControl'
 import { Section } from '@/components/editor/ui/Section'
+import { Dropzone } from '@/components/Dropzone'
 import { PreviewCanvas } from '@/components/PreviewCanvas'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +19,7 @@ import { applyToBatch } from '@/lib/editor/batch'
 import { useRecipeHistory } from '@/lib/editor/history'
 import { exportRecipe, triggerDownload } from '@/lib/editor/export'
 import { identityLightParams } from '@/lib/editor/light-blend'
+import { takePendingFile } from '@/lib/pending-file'
 import type { AdjustColorParams, AdjustLightParams, BlackAndWhiteParams, CropParams, Recipe } from '@/lib/recipe/schema'
 
 interface EditState {
@@ -121,7 +123,6 @@ export default function EditorPage() {
   const [exportError, setExportError] = useState<string | null>(null)
   const [isSubmittingBatch, setIsSubmittingBatch] = useState(false)
   const [batchError, setBatchError] = useState<string | null>(null)
-  const [isDragOver, setIsDragOver] = useState(false)
   const batchFileInputRef = useRef<HTMLInputElement>(null)
   const history = useRecipeHistory<EditState>(initialEditState)
   const live = history.present
@@ -148,18 +149,18 @@ export default function EditorPage() {
     setExportError(null)
   }
 
-  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    await loadFile(file)
-  }
-
-  function handleDrop(event: React.DragEvent<HTMLLabelElement>) {
-    event.preventDefault()
-    setIsDragOver(false)
-    const file = event.dataTransfer.files?.[0]
+  // Picks up a file the home page's drop-zone already captured
+  // (apps/web/src/lib/pending-file.ts) so dropping a photo on `/` doesn't
+  // force a second drop here. Absent (direct visit, hard refresh) is the
+  // normal case and falls through to this page's own empty-state dropzone.
+  // A one-shot read of an external module-level stash, not a
+  // derivable-from-props value; takePendingFile() self-clears so this can't
+  // loop or re-fire on a later render.
+  useEffect(() => {
+    const file = takePendingFile()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (file) void loadFile(file)
-  }
+  }, [])
 
   const recipe = deriveRecipe(live)
 
@@ -261,35 +262,12 @@ export default function EditorPage() {
           {image ? (
             <PreviewCanvas image={image} recipe={recipe} />
           ) : (
-            <label
-              className="relative flex h-full min-h-96 w-full max-w-2xl cursor-pointer items-center justify-center rounded-sm"
-              onDragOver={(event) => {
-                event.preventDefault()
-                setIsDragOver(true)
-              }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={handleDrop}
-            >
-              <input type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
-              <div className="pointer-events-none absolute inset-6">
-                {(['top-0 left-0 border-t-2 border-l-2', 'top-0 right-0 border-t-2 border-r-2', 'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2'] as const).map(
-                  (corner) => (
-                    <span
-                      key={corner}
-                      className={`absolute h-6 w-6 ${corner} ${isDragOver ? 'border-primary' : 'border-muted-foreground/40'}`}
-                    />
-                  ),
-                )}
-              </div>
-              <div className="flex flex-col items-center gap-3 text-center">
-                <UploadCloud
-                  className={isDragOver ? 'size-6 text-primary' : 'size-6 text-muted-foreground'}
-                />
-                <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
-                  Drop a photo, or click to choose
-                </p>
-              </div>
-            </label>
+            <Dropzone
+              accept="image/*"
+              label="Drop a photo, or click to choose"
+              onFile={loadFile}
+              className="h-full min-h-96 w-full max-w-2xl"
+            />
           )}
         </section>
 

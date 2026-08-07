@@ -89,12 +89,42 @@ describe('CreatePipelineDto', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
-  it('still accepts a video.transcode step with an arbitrary object (no schema for video/audio yet)', async () => {
+  it('accepts a video.transcode step with valid params', async () => {
+    const dto = buildDto([
+      {
+        id: 'step-1',
+        processor: 'video.transcode',
+        params: { format: 'mp4', quality: 75 },
+      },
+    ]);
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects a video.transcode step with params that no longer fall back to a plain-object check (TASK-quick-actions-screen.md)', async () => {
     const dto = buildDto([
       {
         id: 'step-1',
         processor: 'video.transcode',
         params: { codec: 'h264', bitrate: 4_000_000 },
+      },
+    ]);
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+    const paramsError = errors[0].children?.[0]?.children?.find(
+      (e) => e.property === 'params',
+    );
+    expect(paramsError?.constraints?.validateProcessorParams).toContain(
+      'params invalid for "video.transcode"',
+    );
+  });
+
+  it('accepts an audio.convert step with valid params', async () => {
+    const dto = buildDto([
+      {
+        id: 'step-1',
+        processor: 'audio.convert',
+        params: { format: 'wav', bitrate: 128 },
       },
     ]);
     const errors = await validate(dto);

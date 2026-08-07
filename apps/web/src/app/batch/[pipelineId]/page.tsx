@@ -13,28 +13,13 @@ import {
   isTerminalJobStatus,
   jobOutputRef,
   jobStepProgress,
-  type JobStatus,
+  JOB_STATUS_BADGE_VARIANT,
+  JOB_STATUS_LABEL,
   type JobSummary,
 } from '@/lib/editor/batch-progress'
 import { cn } from '@/lib/utils'
 
 const POLL_INTERVAL_MS = 2000
-
-const STATUS_LABEL: Record<JobStatus, string> = {
-  QUEUED: 'Queued',
-  RUNNING: 'Processing',
-  PARTIAL: 'Partial',
-  COMPLETE: 'Done',
-  FAILED: 'Failed',
-}
-
-const STATUS_BADGE_VARIANT: Record<JobStatus, 'secondary' | 'default' | 'destructive'> = {
-  QUEUED: 'secondary',
-  RUNNING: 'secondary',
-  PARTIAL: 'secondary',
-  COMPLETE: 'default',
-  FAILED: 'destructive',
-}
 
 // One row per job -- polls GET /jobs/:id on its own cadence and stops once
 // the job reaches a terminal status. Kept as its own component (rather than
@@ -97,11 +82,11 @@ function JobRow({ jobId, index }: { jobId: string; index: number }) {
           File {index + 1}
         </span>
         {job && (
-          <Badge variant={STATUS_BADGE_VARIANT[job.status]} className="font-mono text-[10px] uppercase">
+          <Badge variant={JOB_STATUS_BADGE_VARIANT[job.status]} className="font-mono text-[10px] uppercase">
             {job.status === 'RUNNING' && <Loader2 className="animate-spin" />}
             {job.status === 'COMPLETE' && <CircleCheck />}
             {job.status === 'FAILED' && <CircleX />}
-            {STATUS_LABEL[job.status]}
+            {JOB_STATUS_LABEL[job.status]}
           </Badge>
         )}
       </div>

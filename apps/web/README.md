@@ -9,7 +9,11 @@ adjustment writes recipe parameters; nothing is ever applied to pixels until exp
 
 | Route | Purpose |
 |---|---|
-| `/editor` | The primary editor surface — drop/select a photo, adjust via curated Light/Color/Black & White/Sharpen/Crop controls, undo/redo, export |
+| `/` | Home page — drop a photo/video/audio file (routed to the right tool automatically) or pick one of the two cards below |
+| `/editor` | The primary editor surface — drop/select a photo, adjust via curated Light/Color/Black & White/Sharpen/Crop controls, undo/redo, export, Apply to Batch |
+| `/batch/[pipelineId]` | Progress/download view for a batch job created by the editor's Apply to Batch flow |
+| `/quick-actions` | Video/audio counterpart to the editor — drop/select a video or audio file, run one named preset (shrink, convert format, extract audio), no raw parameter controls |
+| `/quick-actions/[jobId]` | Progress/download view for a single job created by `/quick-actions` |
 | `/preview-demo` | Renderer smoke-test harness — raw per-parameter controls against the `PreviewRenderer` (WebGPU/WebGL2) directly, not the curated editor UI |
 
 ## Live preview
@@ -38,8 +42,10 @@ pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000/editor](http://localhost:3000/editor). Export requires a
-running `apps/orchestrator` and `workers/cmd/renderserver` (see their own READMEs).
+Open [http://localhost:3001](http://localhost:3001) (bumped from Next's default 3000 to
+avoid colliding with `apps/orchestrator`, which also defaults to 3000). Export and
+Apply to Batch require a running `apps/orchestrator` and `workers/cmd/renderserver` (see
+their own READMEs).
 
 ## Test
 

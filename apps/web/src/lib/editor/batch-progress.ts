@@ -35,7 +35,27 @@ export async function fetchJob(jobId: string, fetchImpl: typeof fetch = fetch): 
 }
 
 export function isTerminalJobStatus(status: JobStatus): boolean {
-  return status === 'COMPLETE' || status === 'FAILED'
+  return status === 'COMPLETE' || status === 'FAILED' || status === 'PARTIAL'
+}
+
+// Shared status→copy/badge-variant lookup -- used by both the batch progress
+// view (apps/web/src/app/batch/[pipelineId]/page.tsx) and the quick-actions
+// single-job progress view (apps/web/src/app/quick-actions/[jobId]/page.tsx),
+// which would otherwise hand-duplicate the same five-entry table.
+export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
+  QUEUED: 'Queued',
+  RUNNING: 'Processing',
+  PARTIAL: 'Partial',
+  COMPLETE: 'Done',
+  FAILED: 'Failed',
+}
+
+export const JOB_STATUS_BADGE_VARIANT: Record<JobStatus, 'secondary' | 'default' | 'destructive'> = {
+  QUEUED: 'secondary',
+  RUNNING: 'secondary',
+  PARTIAL: 'secondary',
+  COMPLETE: 'default',
+  FAILED: 'destructive',
 }
 
 // Steps run in `order` -- count how many have reached a settled state

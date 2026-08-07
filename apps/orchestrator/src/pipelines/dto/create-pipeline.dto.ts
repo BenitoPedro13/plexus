@@ -13,42 +13,28 @@ import {
   registerDecorator,
 } from 'class-validator';
 import {
-  imageProcessorId,
-  imageProcessorParamsSchemas,
-  type ImageProcessorId,
+  builtinProcessorId,
+  builtinProcessorParamsSchemas,
+  type BuiltinProcessorId,
 } from '@plexus/recipe';
 
 // Phase 1 built-in processors only (spec "Suggested Phasing" — Phase 1). External
-// gRPC plugins are Phase 4; not accepted here. The 8 image.* ids are the single
-// source of truth from @plexus/recipe (TASK-recipe-packages-extraction.md) — this
-// list used to hand-maintain its own, staler copy that was missing crop/adjustLight/
-// adjustColor/blackAndWhite/sharpen entirely. video.*/audio.* have no editor
-// equivalent (they don't apply to a single-image recipe) and no TS param schema
-// anywhere yet — only the Go processors under workers/internal/processors define
-// their shape — so they stay hand-listed here and their params fall back to a
-// plain-object check in ValidateProcessorParams below, not per-field validation.
-export const BUILTIN_PROCESSORS = [
-  ...imageProcessorId.options,
-  'video.transcode',
-  'video.compress',
-  'audio.extract',
-  'audio.convert',
-] as const;
+// gRPC plugins are Phase 4; not accepted here. All 12 ids (8 image.* + 2 video.* +
+// 2 audio.*) are the single source of truth from @plexus/recipe
+// (TASK-recipe-packages-extraction.md, extended by TASK-quick-actions-screen.md) —
+// this list used to hand-maintain its own copy for video/audio with no per-field
+// param schema, falling back to a plain-object check. Now every processor's params
+// validate against its real schema via builtinProcessorParamsSchemas below.
+export const BUILTIN_PROCESSORS = builtinProcessorId.options;
 
-export type BuiltinProcessor = (typeof BUILTIN_PROCESSORS)[number];
-
-const IMAGE_PROCESSOR_IDS = new Set<string>(imageProcessorId.options);
-
-function isImageProcessor(processor: string): processor is ImageProcessorId {
-  return IMAGE_PROCESSOR_IDS.has(processor);
-}
+export type BuiltinProcessor = BuiltinProcessorId;
 
 // Bridges @plexus/recipe's Zod schemas into class-validator, which can't compose
 // with Zod directly (no off-the-shelf adapter that fit both class-validator's
 // per-property decorator model and Zod's discriminated union — see
 // docs/tasks/TASK-recipe-packages-extraction.md "Mudanças planeadas"). Reads the
 // sibling `processor` field via ValidationArguments.object to pick the matching
-// schema; falls back to a plain-object check for video/audio, which have no schema.
+// schema.
 function ValidateProcessorParams(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
@@ -57,22 +43,21 @@ function ValidateProcessorParams(validationOptions?: ValidationOptions) {
       propertyName,
       options: validationOptions,
       validator: {
+        // `processor` can be any string at this point -- @IsIn(BUILTIN_PROCESSORS)
+        // runs as a sibling decorator, not a precondition, so an unknown id
+        // must fail here too rather than throwing on the missing schema lookup.
         validate(value: unknown, args: ValidationArguments) {
           const processor = (args.object as StepDto).processor;
-          if (!isImageProcessor(processor)) {
-            return typeof value === 'object' && value !== null;
-          }
-          return imageProcessorParamsSchemas[processor].safeParse(value)
-            .success;
+          const schema = builtinProcessorParamsSchemas[processor];
+          return schema !== undefined && schema.safeParse(value).success;
         },
         defaultMessage(args: ValidationArguments) {
           const processor = (args.object as StepDto).processor;
-          if (!isImageProcessor(processor)) {
-            return `params for "${processor}" must be an object`;
+          const schema = builtinProcessorParamsSchemas[processor];
+          if (schema === undefined) {
+            return `unknown processor "${processor}"`;
           }
-          const result = imageProcessorParamsSchemas[processor].safeParse(
-            args.value,
-          );
+          const result = schema.safeParse(args.value);
           if (result.success) {
             return `params invalid for "${processor}"`;
           }
