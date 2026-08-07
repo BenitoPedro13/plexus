@@ -101,7 +101,11 @@ export function PreviewCanvas({ image, recipe }: PreviewCanvasProps) {
       <div className="relative w-fit rounded-sm border border-border bg-secondary p-2">
         <canvas ref={canvasRef} className="block max-w-full" />
         {status.state === 'ready' && (
-          <span className="absolute top-3 right-3 rounded-sm bg-background/90 px-1.5 py-0.5 font-mono text-[10px] tracking-[0.08em] text-primary uppercase">
+          // Sits in the frame's own p-2 gutter (dark, always-predictable
+          // background), not overlapping the canvas -- a corner badge on
+          // top of the photo itself reads poorly against bright/overexposed
+          // image content. See docs/tasks/TASK-editor-visual-design.md D-39.
+          <span className="absolute top-0.5 right-0.5 rounded-sm bg-background px-1.5 py-0.5 font-mono text-[10px] tracking-[0.08em] text-primary uppercase">
             {status.backend}
           </span>
         )}
