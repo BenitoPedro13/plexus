@@ -41,13 +41,13 @@ the choice.
   infra up and waits for health (`docker compose -f infra/docker-compose.yml up --wait`),
   then fans out to the three long-running dev processes via `concurrently` — orchestrator
   (`pnpm --filter orchestrator start:dev`), the Go worker (`go run ./cmd/worker` from
-  `workers/`), and the web app (`pnpm --filter web dev -- -p 3001`, the port bump avoiding
+  `workers/`), and the web app (`pnpm --filter web dev -p 3001`, the port bump avoiding
   the orchestrator's `PORT=3000`). All three inherit the exported `.env` vars from the
   parent shell — no per-app loader needed for this path (`D-43`'s fix is *at the
   orchestration layer*, not inside `main.ts`/`main.go`; running an app standalone, outside
   `pnpm dev`, still needs the manual export, which stays documented).
 - **`apps/web/package.json`** — no change needed: the port is passed at invocation time
-  (`next dev -- -p 3001`) from the root script, not hardcoded into the app's own `dev`
+  (`next dev -p 3001`) from the root script, not hardcoded into the app's own `dev`
   script, so `cd apps/web && pnpm dev` unchanged still defaults to 3000 for anyone running
   it standalone.
 - **`README.md` (root)** — replace the four-terminal "Getting started" block with `pnpm dev`
@@ -100,18 +100,33 @@ output for free instead of interleaving three processes' raw stdout by hand.
   version) — if the orchestrator crashes, the worker/web dev servers are not useful running
   alone, so tearing down the whole group on any one exit gives one clear failure instead of
   two dev servers quietly still up against a dead backend.
-- **Web's port bump (3001) is passed at invocation** (`pnpm --filter web dev -- -p 3001`),
+- **Web's port bump (3001) is passed at invocation** (`pnpm --filter web dev -p 3001`),
   not hardcoded into `apps/web/package.json`'s own `"dev"` script — so `cd apps/web && pnpm
   dev` standalone is unchanged (still defaults to 3000), only the root-orchestrated path
   picks a non-colliding port.
 - **`concurrently`/`dotenv-cli` added as root `devDependencies`** (`pnpm add -D -w`), not
   duplicated into `apps/web`/`apps/orchestrator` — this is a repo-wide dev-orchestration
   concern, not owned by any one workspace package.
+- **Bug found by the user's first real `pnpm dev` run, fixed same-session**: the original
+  `pnpm --filter web dev -- -p 3001` (and the README's standalone `pnpm dev -- -p 3001`)
+  included an npm-convention `--` separator before the forwarded args. pnpm 11.5.2's `pnpm
+  run <script> [<args>...]`/`pnpm --filter <pkg> <script> [<args>...]` forwards trailing
+  args to the underlying command *as-is*, `--` included — so `next dev` received a literal
+  `-- -p 3001`, couldn't parse `--` as a flag, and fell through to positional-argument
+  handling, reading `-p` as a project directory (`Invalid project directory provided, no
+  such directory: apps/web/-p`). Confirmed via `pnpm run --help`'s own usage line (`pnpm run
+  <command> [<args>...]`, no `--` in the syntax) and a direct throwaway repro
+  (`next dev -p 3001 --help` echoes clean; `next dev -- -p 3001 --help` reproduces the
+  exact error). Fixed by dropping the stray `--` in both `scripts/dev.sh` and the README.
 - **Verified**: `bash -n scripts/dev.sh` (syntax), `docker compose -f infra/docker-compose.yml
   up --wait` run directly (confirmed all three services report Healthy), `pnpm exec
   concurrently --help` confirmed `-n`/`-c`/`-k` against the actually-installed version
-  rather than assumed from memory (CLAUDE.md §2.0). **Not run end-to-end as `pnpm dev`**
-  in this session — the user already had a manual orchestrator/worker/web session live on
-  the same ports during implementation; starting a second copy would have port-conflicted
-  with their in-progress testing rather than proven anything new. Owed: the user (or a
-  future session) running `pnpm dev` from a clean slate.
+  rather than assumed from memory (CLAUDE.md §2.0). The user then ran `pnpm dev` for real
+  twice: the first run surfaced the `--` bug above; after the fix, the second run came up
+  clean end-to-end — infra reported Healthy, the orchestrator mapped every route (including
+  `POST /jobs/batch`) and logged `[DbService] Migrations applied` (confirming `D-44`'s fix
+  independently, on a real `pnpm dev` boot rather than just the earlier manual
+  `drizzle-kit migrate`), the worker connected and started consuming
+  `plexus.jobs.dispatch`, and web served `✓ Ready in 427ms` on `:3001`. Ctrl+C then
+  triggered the expected `--kill-others` cascade shutdown (Next's dev server exits fast on
+  SIGINT, which trips the group teardown) — not a failure.

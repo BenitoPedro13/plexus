@@ -129,7 +129,7 @@ pnpm --filter orchestrator start:dev
 cd workers && go run ./cmd/worker
 
 # Editor / frontend — pick a port that doesn't collide with the orchestrator's 3000
-cd apps/web && pnpm dev -- -p 3001
+cd apps/web && pnpm dev -p 3001
 ```
 
 </details>

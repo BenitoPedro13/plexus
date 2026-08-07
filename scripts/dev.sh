@@ -14,4 +14,4 @@ exec pnpm exec concurrently \
   --kill-others \
   "pnpm --filter orchestrator start:dev" \
   "cd workers && go run ./cmd/worker" \
-  "pnpm --filter web dev -- -p 3001"
+  "pnpm --filter web dev -p 3001"
