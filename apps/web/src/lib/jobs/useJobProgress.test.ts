@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { JobSummary } from '../editor/batch-progress'
+import { jobOutputRef, type JobSummary } from '../editor/batch-progress'
 import { applyJobProgressEvent, useJobProgress, type JobProgressEvent } from './useJobProgress'
 
 function job(overrides: Partial<JobSummary> = {}): JobSummary {
@@ -56,6 +56,21 @@ describe('applyJobProgressEvent', () => {
       error: 'boom',
     })
     expect(result?.steps[0]).toMatchObject({ status: 'FAILED', error: 'boom' })
+  })
+
+  it('a step-complete event carrying outputRef makes jobOutputRef resolve without a snapshot refetch', () => {
+    const current = job()
+    const result = applyJobProgressEvent(current, {
+      scope: 'step',
+      jobId: 'job-1',
+      jobStepId: 's2',
+      stepId: 'compress',
+      order: 1,
+      status: 'COMPLETE',
+      outputRef: 'steps/s2.jpg',
+    })
+    expect(result?.steps[1]).toMatchObject({ status: 'COMPLETE', outputRef: 'steps/s2.jpg' })
+    expect(result && jobOutputRef(result)).toBe('steps/s2.jpg')
   })
 
   it('ignores job/step events for a different job id than the one currently held', () => {

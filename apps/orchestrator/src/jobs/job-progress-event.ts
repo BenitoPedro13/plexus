@@ -26,6 +26,7 @@ export type JobProgressEvent =
       order: number;
       status: JobStepStatus;
       error?: string;
+      outputRef?: string;
     };
 
 export function isTerminalJobProgressEvent(event: JobProgressEvent): boolean {

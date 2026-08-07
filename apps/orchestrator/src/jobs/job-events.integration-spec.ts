@@ -129,6 +129,22 @@ describe('JobsService.streamEvents (integration, real Postgres + real NATS)', ()
 
     expect(events.map((event) => event.scope)).toContain('step');
     expect(events.at(-1)).toMatchObject({ scope: 'job', status: 'COMPLETE' });
+
+    // TASK-step-progress-outputref.md: a completed step's event must carry
+    // outputRef so a client can offer a download without waiting for a
+    // fresh snapshot -- the earlier symptom was this being silently
+    // dropped despite the DB already having the value.
+    const compressStepEvent = events.find(
+      (event) =>
+        event.scope === 'step' &&
+        event.stepId === 'compress' &&
+        event.status === 'COMPLETE',
+    );
+    expect(compressStepEvent).toMatchObject({
+      scope: 'step',
+      status: 'COMPLETE',
+      outputRef: '/tmp/compressed.jpg',
+    });
   }, 15_000);
 
   async function failStep(

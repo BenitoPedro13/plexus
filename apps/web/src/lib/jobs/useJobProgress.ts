@@ -22,6 +22,7 @@ export type JobProgressEvent =
       order: number
       status: JobStepStatus
       error?: string
+      outputRef?: string
     }
 
 // Pure reducer, unit-tested on its own (same extraction precedent as
@@ -47,7 +48,12 @@ export function applyJobProgressEvent(
     ...current,
     steps: current.steps.map((step) =>
       step.id === event.jobStepId
-        ? { ...step, status: event.status, error: event.error ?? step.error }
+        ? {
+            ...step,
+            status: event.status,
+            error: event.error ?? step.error,
+            outputRef: event.outputRef ?? step.outputRef,
+          }
         : step,
     ),
   }

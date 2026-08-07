@@ -50,6 +50,7 @@ export async function handleStepResult(
       order: appliedStep.order,
       status: appliedStep.status,
       error: appliedStep.error ?? undefined,
+      outputRef: appliedStep.outputRef ?? undefined,
     });
   } catch (err) {
     if (!(err instanceof IllegalTransitionError)) {
