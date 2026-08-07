@@ -60,12 +60,15 @@ export const adjustLightParamsSchema = z.object({
 
 export type AdjustLightParams = z.infer<typeof adjustLightParamsSchema>
 
-// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
-// Deferred params (cast — unblocked but not yet schema'd, D-27; vibrance —
-// curve is a visual judgment call, D-29) intentionally omitted, see
+// P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table,
+// extended by docs/tasks/TASK-adjust-color-cast.md (resolved D-27). castStrength is
+// optional/defaulted (0.0 = no-op), like adjustLightParamsSchema's highlights/shadows,
+// so pre-existing recipes authored before this task don't need updating. Deferred param
+// (vibrance — curve is a visual judgment call, D-29) intentionally omitted, see
 // docs/90-deferred-register.md.
 export const adjustColorParamsSchema = z.object({
   saturation: z.number().min(-1.0).max(1.0),
+  castStrength: z.number().min(0.0).max(1.0).default(0.0),
 })
 
 export type AdjustColorParams = z.infer<typeof adjustColorParamsSchema>

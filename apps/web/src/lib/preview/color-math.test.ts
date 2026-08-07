@@ -101,32 +101,32 @@ describe('highlightsShadowsL', () => {
 
 describe('applyAdjustColor', () => {
   it('saturation=0 is identity within float tolerance', () => {
-    const result = applyAdjustColor(RED, { saturation: 0 })
+    const result = applyAdjustColor(RED, { saturation: 0, castStrength: 0 })
     expect(result.r).toBeCloseTo(RED.r, 2)
     expect(result.g).toBeCloseTo(RED.g, 2)
     expect(result.b).toBeCloseTo(RED.b, 2)
   })
 
   it('saturation=-1 fully desaturates to R=G=B', () => {
-    const result = applyAdjustColor(RED, { saturation: -1 })
+    const result = applyAdjustColor(RED, { saturation: -1, castStrength: 0 })
     expect(result.r).toBeCloseTo(result.g, 2)
     expect(result.g).toBeCloseTo(result.b, 2)
   })
 
   it('positive saturation increases channel spread on a non-gray pixel', () => {
-    const baseline = applyAdjustColor(RED, { saturation: 0 })
-    const boosted = applyAdjustColor(RED, { saturation: 0.5 })
+    const baseline = applyAdjustColor(RED, { saturation: 0, castStrength: 0 })
+    const boosted = applyAdjustColor(RED, { saturation: 0.5, castStrength: 0 })
     const spread = (p: RGBA) => Math.max(p.r, p.g, p.b) - Math.min(p.r, p.g, p.b)
     expect(spread(boosted)).toBeGreaterThan(spread(baseline))
   })
 
   it('preserves alpha', () => {
-    const result = applyAdjustColor({ ...RED, a: 0.4 }, { saturation: 0.5 })
+    const result = applyAdjustColor({ ...RED, a: 0.4 }, { saturation: 0.5, castStrength: 0 })
     expect(result.a).toBe(0.4)
   })
 
   it('a perfectly achromatic pixel stays finite and unchanged at saturation>0 (TASK-adjust-color-atan2-zero-fix: atan2(0,0) is undefined in WGSL/GLSL, guarded via CHROMA_EPSILON)', () => {
-    const result = applyAdjustColor(GRAY, { saturation: 1.0 })
+    const result = applyAdjustColor(GRAY, { saturation: 1.0, castStrength: 0 })
     expect(Number.isFinite(result.r)).toBe(true)
     expect(Number.isFinite(result.g)).toBe(true)
     expect(Number.isFinite(result.b)).toBe(true)

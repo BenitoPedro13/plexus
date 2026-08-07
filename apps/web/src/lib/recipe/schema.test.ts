@@ -55,15 +55,21 @@ describe('recipeSchema', () => {
 
     const parsed = recipeSchema.parse(recipe)
     // step-4 (image.adjustLight) omits highlights/shadows on input -- they
-    // default to 0 on parse (TASK-highlights-shadows-tonelut.md), so the
-    // round-trip isn't byte-identical to the input for that one step.
+    // default to 0 on parse (TASK-highlights-shadows-tonelut.md); step-5
+    // (image.adjustColor) omits castStrength -- it defaults to 0 on parse
+    // (TASK-adjust-color-cast.md) -- so the round-trip isn't byte-identical
+    // to the input for those two steps.
     expect(parsed).toEqual({
       ...recipe,
-      steps: recipe.steps.map((step) =>
-        step.id === 'step-4'
-          ? { ...step, params: { ...step.params, highlights: 0, shadows: 0 } }
-          : step,
-      ),
+      steps: recipe.steps.map((step) => {
+        if (step.id === 'step-4') {
+          return { ...step, params: { ...step.params, highlights: 0, shadows: 0 } }
+        }
+        if (step.id === 'step-5') {
+          return { ...step, params: { ...step.params, castStrength: 0 } }
+        }
+        return step
+      }),
     })
   })
 
@@ -244,7 +250,7 @@ describe('adjustLightParamsSchema', () => {
 
 describe('adjustColorParamsSchema', () => {
   test.each([-1.0, 1.0])('accepts saturation at boundary %d', (saturation) => {
-    expect(adjustColorParamsSchema.parse({ saturation })).toEqual({ saturation })
+    expect(adjustColorParamsSchema.parse({ saturation })).toEqual({ saturation, castStrength: 0 })
   })
 
   test('requires saturation', () => {
@@ -253,6 +259,24 @@ describe('adjustColorParamsSchema', () => {
 
   test.each([-1.1, 1.1])('rejects out-of-range saturation %d', (saturation) => {
     expect(() => adjustColorParamsSchema.parse({ saturation })).toThrow()
+  })
+
+  test('castStrength defaults to 0 when omitted', () => {
+    expect(adjustColorParamsSchema.parse({ saturation: 0 })).toEqual({
+      saturation: 0,
+      castStrength: 0,
+    })
+  })
+
+  test.each([0.0, 1.0])('accepts castStrength at boundary %d', (castStrength) => {
+    expect(adjustColorParamsSchema.parse({ saturation: 0, castStrength })).toEqual({
+      saturation: 0,
+      castStrength,
+    })
+  })
+
+  test.each([-0.1, 1.1])('rejects out-of-range castStrength %d', (castStrength) => {
+    expect(() => adjustColorParamsSchema.parse({ saturation: 0, castStrength })).toThrow()
   })
 })
 

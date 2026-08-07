@@ -62,7 +62,7 @@ function deriveRecipe(state: EditState): Recipe {
     steps.push({
       id: 'color',
       processor: 'image.adjustColor',
-      params: { saturation: state.saturation },
+      params: { saturation: state.saturation, castStrength: 0 },
     })
   }
 

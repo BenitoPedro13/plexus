@@ -306,9 +306,9 @@ describe('recipe fidelity drift (V-2)', () => {
   ]
 
   const colorPoints = [
-    { name: 'color-sat-0.5', params: { saturation: 0.5 } },
-    { name: 'color-sat-neg0.5', params: { saturation: -0.5 } },
-    { name: 'color-sat-1.0', params: { saturation: 1.0 } },
+    { name: 'color-sat-0.5', params: { saturation: 0.5, castStrength: 0 } },
+    { name: 'color-sat-neg0.5', params: { saturation: -0.5, castStrength: 0 } },
+    { name: 'color-sat-1.0', params: { saturation: 1.0, castStrength: 0 } },
   ]
 
   const bwPoints = [

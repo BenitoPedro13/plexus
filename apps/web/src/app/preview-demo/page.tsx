@@ -49,7 +49,7 @@ export default function PreviewDemoPage() {
       {
         id: 'preview-adjust-color',
         processor: 'image.adjustColor',
-        params: { saturation },
+        params: { saturation, castStrength: 0 },
       },
       {
         id: 'preview-black-and-white',
