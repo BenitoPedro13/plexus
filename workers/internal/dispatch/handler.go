@@ -8,14 +8,18 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/benitopedro13/plexus/workers/internal/processors"
 )
 
-// Handle is a stub executor: it proves the dispatch/result transport and
-// message contract without doing any real image/video processing. It
-// always reports "complete" regardless of processor/params, discarding a
-// dispatch message rather than reprocessing it forever if it isn't valid
-// JSON. Real ffmpeg/libvips execution is the next task
-// (docs/tasks/TASK-nats-job-dispatch.md, "Explicitly out of scope").
+// Handle dispatches a StepDispatchMessage to the registered built-in
+// processor (workers/internal/processors) and publishes the result. An
+// unparsable message is Term()'d — it's malformed, not a valid job the
+// orchestrator is waiting on. An unknown processor id or a processor
+// validation/execution error both produce a normal StepResultFailed, since
+// the orchestrator's job state machine is already listening for that status
+// (apps/orchestrator/src/jobs/job-result-handler.ts) — silently dropping
+// either would strand the job in RUNNING forever.
 //
 // Factored out of cmd/worker/main.go so it can be exercised directly
 // against a real NATS instance in dispatch_test.go, independent of the
@@ -29,13 +33,23 @@ func Handle(ctx context.Context, js jetstream.JetStream, msg jetstream.Msg) erro
 		return fmt.Errorf("discard unparsable dispatch message: %w", err)
 	}
 
-	log.Printf("processing job=%s step=%s processor=%s (stub, no-op)", in.JobID, in.StepID, in.Processor)
+	log.Printf("processing job=%s step=%s processor=%s", in.JobID, in.StepID, in.Processor)
 
 	out := StepResultMessage{
 		JobID:     in.JobID,
 		JobStepID: in.JobStepID,
-		Status:    StepResultComplete,
-		OutputRef: in.InputRef,
+	}
+
+	fn, ok := processors.Lookup(in.Processor)
+	if !ok {
+		out.Status = StepResultFailed
+		out.Error = fmt.Sprintf("unknown processor: %s", in.Processor)
+	} else if outputRef, err := fn(ctx, in.JobStepID, in.InputRef, in.Params); err != nil {
+		out.Status = StepResultFailed
+		out.Error = err.Error()
+	} else {
+		out.Status = StepResultComplete
+		out.OutputRef = outputRef
 	}
 
 	payload, err := json.Marshal(out)

@@ -13,6 +13,7 @@ workers/bin/
 workers/worker
 workers/**/*.exe
 workers/**/*.test
+workers/data/
 
 # Env
 .env

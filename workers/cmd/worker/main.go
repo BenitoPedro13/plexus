@@ -12,11 +12,17 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/benitopedro13/plexus/workers/internal/dispatch"
+	"github.com/benitopedro13/plexus/workers/internal/processors"
 )
 
 const dispatchDurableName = "worker-dispatch"
 
 func main() {
+	if err := processors.Startup(); err != nil {
+		log.Fatalf("start libvips: %v", err)
+	}
+	defer processors.Shutdown()
+
 	url := os.Getenv("NATS_URL")
 	if url == "" {
 		url = nats.DefaultURL
