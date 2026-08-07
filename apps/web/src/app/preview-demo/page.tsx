@@ -14,6 +14,19 @@ export default function PreviewDemoPage() {
   const [height, setHeight] = useState(400)
   const [fit, setFit] = useState<'inside' | 'cover'>('inside')
 
+  // Composite-slider controls (TASK-composite-preview-shaders.md) --
+  // identity-valued by default so leaving them untouched reproduces the
+  // pre-existing resize-only preview exactly.
+  const [exposure, setExposure] = useState(0)
+  const [brightness, setBrightness] = useState(0)
+  const [contrast, setContrast] = useState(0)
+  const [blackPoint, setBlackPoint] = useState(0)
+  const [saturation, setSaturation] = useState(0)
+  const [bwIntensity, setBwIntensity] = useState(0)
+  const [neutrals, setNeutrals] = useState(0)
+  const [tone, setTone] = useState(0)
+  const [sharpenIntensity, setSharpenIntensity] = useState(0)
+
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -27,6 +40,26 @@ export default function PreviewDemoPage() {
         id: 'preview-resize',
         processor: 'image.resize',
         params: { width, height, fit },
+      },
+      {
+        id: 'preview-adjust-light',
+        processor: 'image.adjustLight',
+        params: { exposure, brightness, contrast, blackPoint },
+      },
+      {
+        id: 'preview-adjust-color',
+        processor: 'image.adjustColor',
+        params: { saturation },
+      },
+      {
+        id: 'preview-black-and-white',
+        processor: 'image.blackAndWhite',
+        params: { intensity: bwIntensity, neutrals, tone },
+      },
+      {
+        id: 'preview-sharpen',
+        processor: 'image.sharpen',
+        params: { intensity: sharpenIntensity },
       },
     ],
   }
@@ -67,6 +100,61 @@ export default function PreviewDemoPage() {
           </select>
         </label>
       </p>
+      <fieldset>
+        <legend>Light</legend>
+        <label>
+          exposure ({exposure.toFixed(2)})
+          <input type="range" min={-3} max={3} step={0.05} value={exposure} onChange={(e) => setExposure(Number(e.target.value))} />
+        </label>
+        <label>
+          brightness ({brightness.toFixed(2)})
+          <input type="range" min={-1} max={1} step={0.05} value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} />
+        </label>
+        <label>
+          contrast ({contrast.toFixed(2)})
+          <input type="range" min={-1} max={1} step={0.05} value={contrast} onChange={(e) => setContrast(Number(e.target.value))} />
+        </label>
+        <label>
+          blackPoint ({blackPoint.toFixed(2)})
+          <input type="range" min={0} max={1} step={0.05} value={blackPoint} onChange={(e) => setBlackPoint(Number(e.target.value))} />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Color</legend>
+        <label>
+          saturation ({saturation.toFixed(2)})
+          <input type="range" min={-1} max={1} step={0.05} value={saturation} onChange={(e) => setSaturation(Number(e.target.value))} />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>B&amp;W</legend>
+        <label>
+          intensity ({bwIntensity.toFixed(2)})
+          <input type="range" min={0} max={1} step={0.05} value={bwIntensity} onChange={(e) => setBwIntensity(Number(e.target.value))} />
+        </label>
+        <label>
+          neutrals ({neutrals.toFixed(2)})
+          <input type="range" min={-1} max={1} step={0.05} value={neutrals} onChange={(e) => setNeutrals(Number(e.target.value))} />
+        </label>
+        <label>
+          tone ({tone.toFixed(2)})
+          <input type="range" min={-1} max={1} step={0.05} value={tone} onChange={(e) => setTone(Number(e.target.value))} />
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Sharpen</legend>
+        <label>
+          intensity ({sharpenIntensity.toFixed(2)})
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={sharpenIntensity}
+            onChange={(e) => setSharpenIntensity(Number(e.target.value))}
+          />
+        </label>
+      </fieldset>
       <PreviewCanvas image={image} recipe={recipe} />
     </main>
   )
