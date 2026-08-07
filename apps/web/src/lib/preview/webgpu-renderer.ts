@@ -192,14 +192,22 @@ const ADJUST_COLOR_WGSL =
 @group(0) @binding(1) var quadSampler: sampler;
 @group(0) @binding(2) var sourceTexture: texture_2d<f32>;
 
+const CHROMA_EPSILON: f32 = 1e-4;
+
 @fragment
 fn fragment_main(in: VertexOutput) -> @location(0) vec4f {
   let c = textureSample(sourceTexture, quadSampler, in.uv);
   let lab = rgbToLab(c.rgb);
   let chroma = length(vec2f(lab.y, lab.z));
-  let hue = atan2(lab.z, lab.y);
   let scaledChroma = max(0.0, chroma * (1.0 + params.x));
-  let newLab = vec3f(lab.x, scaledChroma * cos(hue), scaledChroma * sin(hue));
+  var newAB = vec2f(0.0, 0.0);
+  if (chroma > CHROMA_EPSILON) {
+    // atan2(0, 0) is undefined in WGSL (spec: atan(e1/e2), i.e. atan(0/0) =
+    // atan(NaN) = NaN) -- guard so achromatic pixels never take this path.
+    let hue = atan2(lab.z, lab.y);
+    newAB = vec2f(scaledChroma * cos(hue), scaledChroma * sin(hue));
+  }
+  let newLab = vec3f(lab.x, newAB.x, newAB.y);
   return vec4f(labToRgb(newLab), c.a);
 }
 `

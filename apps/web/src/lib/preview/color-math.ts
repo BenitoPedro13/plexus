@@ -121,17 +121,28 @@ function labToRgb(lab: Lab): { r: number; g: number; b: number } {
 // img.Modulate(1, 1+saturation, 0): convert to LCh, scale chroma by
 // (1+saturation), convert back. Brightness/hue untouched (matches the
 // fixed 1 / 0 arguments Go passes).
+// atan2(0, 0) is well-defined in JS (0) but undefined in WGSL/GLSL (NaN or
+// driver-dependent garbage -- see TASK-adjust-color-atan2-zero-fix.md), so
+// the hue computation is guarded the same way here as in the shaders even
+// though this JS path never hit the bug: below CHROMA_EPSILON the boosted
+// chroma is negligible regardless of hue, so skipping atan2/cos/sin changes
+// no visible output.
+const CHROMA_EPSILON = 1e-4
+
 export function applyAdjustColor(pixel: RGBA, params: AdjustColorParams): RGBA {
   const lab = rgbToLab(pixel.r, pixel.g, pixel.b)
   const chroma = Math.hypot(lab.a, lab.b)
-  const hue = Math.atan2(lab.b, lab.a)
   const scaledChroma = Math.max(0, chroma * (1 + params.saturation))
 
-  const rgb = labToRgb({
-    l: lab.l,
-    a: scaledChroma * Math.cos(hue),
-    b: scaledChroma * Math.sin(hue),
-  })
+  let a = 0
+  let b = 0
+  if (chroma > CHROMA_EPSILON) {
+    const hue = Math.atan2(lab.b, lab.a)
+    a = scaledChroma * Math.cos(hue)
+    b = scaledChroma * Math.sin(hue)
+  }
+
+  const rgb = labToRgb({ l: lab.l, a, b })
 
   return { ...rgb, a: pixel.a }
 }

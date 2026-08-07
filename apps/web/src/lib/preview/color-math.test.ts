@@ -65,6 +65,16 @@ describe('applyAdjustColor', () => {
     const result = applyAdjustColor({ ...RED, a: 0.4 }, { saturation: 0.5 })
     expect(result.a).toBe(0.4)
   })
+
+  it('a perfectly achromatic pixel stays finite and unchanged at saturation>0 (TASK-adjust-color-atan2-zero-fix: atan2(0,0) is undefined in WGSL/GLSL, guarded via CHROMA_EPSILON)', () => {
+    const result = applyAdjustColor(GRAY, { saturation: 1.0 })
+    expect(Number.isFinite(result.r)).toBe(true)
+    expect(Number.isFinite(result.g)).toBe(true)
+    expect(Number.isFinite(result.b)).toBe(true)
+    expect(result.r).toBeCloseTo(GRAY.r, 2)
+    expect(result.g).toBeCloseTo(GRAY.g, 2)
+    expect(result.b).toBeCloseTo(GRAY.b, 2)
+  })
 })
 
 describe('applyBlackAndWhite', () => {

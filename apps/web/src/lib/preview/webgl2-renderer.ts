@@ -164,13 +164,21 @@ out vec4 outColor;
 ` +
   LAB_HELPERS_GLSL +
   /* glsl */ `
+const float CHROMA_EPSILON = 1e-4;
+
 void main() {
   vec4 c = texture(uSource, vUV);
   vec3 lab = rgbToLab(c.rgb);
   float chroma = length(vec2(lab.y, lab.z));
-  float hue = atan(lab.z, lab.y);
   float scaledChroma = max(0.0, chroma * (1.0 + uParams.x));
-  vec3 newLab = vec3(lab.x, scaledChroma * cos(hue), scaledChroma * sin(hue));
+  vec2 newAB = vec2(0.0, 0.0);
+  if (chroma > CHROMA_EPSILON) {
+    // atan(y, x) is undefined at (0, 0) per the GLSL ES spec -- guard so
+    // achromatic pixels never take this path.
+    float hue = atan(lab.z, lab.y);
+    newAB = vec2(scaledChroma * cos(hue), scaledChroma * sin(hue));
+  }
+  vec3 newLab = vec3(lab.x, newAB.x, newAB.y);
   outColor = vec4(labToRgb(newLab), c.a);
 }
 `
