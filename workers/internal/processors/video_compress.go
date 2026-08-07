@@ -34,7 +34,7 @@ func VideoCompress(ctx context.Context, jobStepID, inputRef string, params map[s
 		return "", err
 	}
 
-	args := append([]string{"-i", inputRef, "-c:v", vcodec}, videoCrfArgs(vcodec, quality)...)
+	args := append([]string{"-i", inputRef, "-c:v", vcodec}, videoEncodeArgs(vcodec, quality)...)
 	args = append(args, "-c:a", acodec, "-b:a", "128k", out)
 
 	if err := runFFmpeg(ctx, args...); err != nil {

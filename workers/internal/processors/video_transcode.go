@@ -13,7 +13,7 @@ const defaultVideoQuality = 75
 //	        (mp4 -> h264/aac, webm -> vp9/opus) — see
 //	        docs/tasks/TASK-video-audio-processors.md "Porquê".
 //	quality: optional, 1-100, default 75. Maps to the video codec's CRF via
-//	         videoCrfArgs; audio is always re-encoded at a fixed 128k.
+//	         videoEncodeArgs; audio is always re-encoded at a fixed 128k.
 func VideoTranscode(ctx context.Context, jobStepID, inputRef string, params map[string]interface{}) (string, error) {
 	format, err := requireStringParam(params, "format")
 	if err != nil {
@@ -34,7 +34,7 @@ func VideoTranscode(ctx context.Context, jobStepID, inputRef string, params map[
 		return "", err
 	}
 
-	args := append([]string{"-i", inputRef, "-c:v", vcodec}, videoCrfArgs(vcodec, quality)...)
+	args := append([]string{"-i", inputRef, "-c:v", vcodec}, videoEncodeArgs(vcodec, quality)...)
 	args = append(args, "-c:a", acodec, "-b:a", "128k", out)
 
 	if err := runFFmpeg(ctx, args...); err != nil {

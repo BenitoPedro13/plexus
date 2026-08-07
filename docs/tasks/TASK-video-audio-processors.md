@@ -69,7 +69,7 @@ Verified against the actually-installed binary (`ffmpeg -h encoder=...`, `-muxer
   `convert.go`'s `supportedFormats` in slice 3.
 - `audioCodecForFormat(format string) (codec string, ok bool)` — `"mp3" → "libmp3lame"`,
   `"aac" → "aac"`, `"opus" → "libopus"`, `"wav" → "pcm_s16le"`.
-- `videoCrfArgs(vcodec string, quality int) []string` — quality (1–100) → codec-specific
+- `videoEncodeArgs(vcodec string, quality int) []string` — quality (1–100) → codec-specific
   CRF flags, same "documented judgment call" shape as slice 3's `pngCompressionFromQuality`:
   - `libx264`: `crf := 51 - (quality*51)/100`, clamped `[0,51]`; returns `["-crf", crf]`.
   - `libvpx-vp9`: `crf := 63 - (quality*63)/100`, clamped `[0,63]`; returns

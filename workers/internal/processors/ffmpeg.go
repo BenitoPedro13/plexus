@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -91,12 +92,15 @@ func audioCodecForFormat(format string) (codec string, ok bool) {
 	}
 }
 
-// videoCrfArgs returns the ffmpeg flags that set quality (1-100) as a
-// codec-specific CRF value. This is a documented linear-mapping judgment
-// call, same shape as pngCompressionFromQuality in format.go — x264 and VP9
-// use different CRF scales (0-51 vs 0-63), so there is no single formula.
-// See docs/tasks/TASK-video-audio-processors.md "Porquê".
-func videoCrfArgs(vcodec string, quality int) []string {
+// videoEncodeArgs returns the ffmpeg flags for a codec-specific quality
+// (1-100) as a CRF value, plus (for libvpx-vp9) the multithreading flags
+// needed to actually use more than ~1 core. This is a documented
+// linear-mapping judgment call for the CRF part, same shape as
+// pngCompressionFromQuality in format.go — x264 and VP9 use different CRF
+// scales (0-51 vs 0-63), so there is no single formula. See
+// docs/tasks/TASK-video-audio-processors.md "Porquê" and
+// docs/tasks/TASK-vp9-encode-threading.md.
+func videoEncodeArgs(vcodec string, quality int) []string {
 	switch vcodec {
 	case "libx264":
 		crf := 51 - (quality*51)/100
@@ -106,6 +110,8 @@ func videoCrfArgs(vcodec string, quality int) []string {
 		if crf > 51 {
 			crf = 51
 		}
+		// libx264 auto-detects and uses all available cores by default —
+		// no explicit threading flags needed here.
 		return []string{"-crf", strconv.Itoa(crf)}
 	case "libvpx-vp9":
 		crf := 63 - (quality*63)/100
@@ -118,7 +124,21 @@ func videoCrfArgs(vcodec string, quality int) []string {
 		// -b:v 0 is required for libvpx-vp9 to honor -crf as true constant
 		// quality mode; without it the encoder ignores -crf and falls back
 		// to its default bitrate-target mode. See "Porquê" (V-3).
-		return []string{"-crf", strconv.Itoa(crf), "-b:v", "0"}
+		//
+		// -row-mt 1 and -tile-columns 2 are threading-only flags (no
+		// quality/size cost — see TASK-vp9-encode-threading.md's benchmark):
+		// libvpx-vp9 defaults to effectively single-threaded encoding
+		// (`ffmpeg -h encoder=libvpx-vp9` reports -row-mt default "auto",
+		// which resolves to off in practice) regardless of -threads, so
+		// without them one core does nearly all the work no matter how many
+		// are available. -threads sizes the encoder's thread pool to the
+		// host's logical CPUs.
+		return []string{
+			"-crf", strconv.Itoa(crf), "-b:v", "0",
+			"-row-mt", "1",
+			"-tile-columns", "2",
+			"-threads", strconv.Itoa(runtime.NumCPU()),
+		}
 	default:
 		return nil
 	}

@@ -29,7 +29,7 @@ Two real backend gaps also matter for what this screen can honestly promise:
   already be `mp4` or `webm` (`video_compress.go`'s `videoCodecsForContainer` check) — it
   errors on `.mov`/`.avi`/`.mkv` input rather than transcoding first.
 - `video.compress`'s `quality` param (1-100, higher = better quality/bigger file — see
-  `ffmpeg.go`'s `videoCrfArgs`, a CRF-style knob) has no relationship to a target output
+  `ffmpeg.go`'s `videoEncodeArgs`, a CRF-style knob) has no relationship to a target output
   size in MB. There is no 2-pass/target-bitrate encoding path today.
 
 ## Mudanças planeadas
