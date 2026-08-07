@@ -6,9 +6,10 @@ interface ColorControlProps {
   onCommit: () => void
 }
 
-// Color has exactly one P0 param (saturation -- Vibrance/Cast are
-// V-8-blocked), so it's already the raw param: no fan-out blend and no
-// "Adjust manually" toggle needed, per docs/tasks/TASK-editor-composite-ui.md.
+// Color has exactly one P0 param (saturation -- Vibrance/Cast schema+Go
+// work not yet done, see D-27/D-29 in docs/90-deferred-register.md), so
+// it's already the raw param: no fan-out blend and no "Adjust manually"
+// toggle needed, per docs/tasks/TASK-editor-composite-ui.md.
 export function ColorControl({ saturation, onChange, onCommit }: ColorControlProps) {
   return (
     <fieldset onPointerUp={onCommit}>

@@ -13,8 +13,9 @@ import (
 //
 //	saturation: -1.0..1.0, required.
 //
-// Deferred: vibrance, cast — blocked on V-8 (no govips primitive found for
-// either), see docs/90-deferred-register.md.
+// Deferred: cast (unblocked, not yet implemented — D-27), vibrance (blend
+// primitives identified but exact curve is a visual judgment call — D-29),
+// see docs/90-deferred-register.md and docs/tasks/TASK-vibrance-cast-grain-spike.md.
 func AdjustColor(_ context.Context, jobStepID, inputRef string, params map[string]interface{}) (string, error) {
 	saturation, err := requireFloatParamInRange(params, "saturation", -1.0, 1.0)
 	if err != nil {

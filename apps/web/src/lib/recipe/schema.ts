@@ -61,7 +61,9 @@ export const adjustLightParamsSchema = z.object({
 export type AdjustLightParams = z.infer<typeof adjustLightParamsSchema>
 
 // P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
-// Deferred params (vibrance, cast — blocked on V-8) intentionally omitted.
+// Deferred params (cast — unblocked but not yet schema'd, D-27; vibrance —
+// curve is a visual judgment call, D-29) intentionally omitted, see
+// docs/90-deferred-register.md.
 export const adjustColorParamsSchema = z.object({
   saturation: z.number().min(-1.0).max(1.0),
 })
@@ -69,7 +71,8 @@ export const adjustColorParamsSchema = z.object({
 export type AdjustColorParams = z.infer<typeof adjustColorParamsSchema>
 
 // P0 param subset from docs/tasks/TASK-composite-slider-mapping.md's mapping table.
-// Deferred param (grain — blocked on V-8) intentionally omitted.
+// Deferred param (grain — needs a govips-fork Gaussnoise wrapper first,
+// D-28) intentionally omitted, see docs/90-deferred-register.md.
 export const blackAndWhiteParamsSchema = z.object({
   intensity: z.number().min(0.0).max(1.0),
   neutrals: z.number().min(-1.0).max(1.0),

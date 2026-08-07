@@ -51,8 +51,10 @@ func grayscaleMatrix(neutrals float64) [][]float64 {
 // this package's fixtures (gradient.jpg/gradient.png are both opaque
 // 3-band), so treat that as read-from-source, not measured.
 //
-// Deferred: grain — blocked on V-8 (no govips primitive found), see
-// docs/90-deferred-register.md.
+// Deferred: grain — needs a small workers/internal/govips-fork/vips/
+// extension for a public Gaussnoise wrapper before implementation (D-28,
+// same precedent as D-24's Tonelut fork), see docs/90-deferred-register.md
+// and docs/tasks/TASK-vibrance-cast-grain-spike.md.
 func BlackAndWhite(_ context.Context, jobStepID, inputRef string, params map[string]interface{}) (string, error) {
 	intensity, err := requireFloatParamInRange(params, "intensity", 0.0, 1.0)
 	if err != nil {
