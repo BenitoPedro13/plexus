@@ -25,6 +25,12 @@ const (
 	secretKeyEnv = "MINIO_SECRET_KEY"
 	bucketEnv    = "MINIO_BUCKET"
 	useSSLEnv    = "MINIO_USE_SSL"
+	// pathStyleEnv mirrors apps/orchestrator/src/upload/upload.service.ts's
+	// MINIO_PATH_STYLE: unset/true keeps the client default (path-style,
+	// matches self-hosted MinIO in infra/docker-compose.yml); "false" switches
+	// to virtual-host-style, required by Railway's managed Bucket — see
+	// docs/tasks/TASK-deploy-railway.md.
+	pathStyleEnv = "MINIO_PATH_STYLE"
 
 	// stagingDirEnv is the same WORKER_STORAGE_DIR every built-in processor
 	// already reads/writes through (workers/internal/processors/output.go) —
@@ -55,9 +61,14 @@ func New(ctx context.Context) (*Client, error) {
 		return nil, fmt.Errorf("%s is not set", bucketEnv)
 	}
 
+	lookup := minio.BucketLookupPath
+	if os.Getenv(pathStyleEnv) == "false" {
+		lookup = minio.BucketLookupDNS
+	}
 	mc, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(os.Getenv(accessKeyEnv), os.Getenv(secretKeyEnv), ""),
-		Secure: os.Getenv(useSSLEnv) == "true",
+		Creds:        credentials.NewStaticV4(os.Getenv(accessKeyEnv), os.Getenv(secretKeyEnv), ""),
+		Secure:       os.Getenv(useSSLEnv) == "true",
+		BucketLookup: lookup,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create minio client for %q: %w", endpoint, err)

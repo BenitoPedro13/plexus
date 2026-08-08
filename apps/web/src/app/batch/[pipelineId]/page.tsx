@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { CircleCheck, CircleX, Loader2 } from 'lucide-react'
 import { AppHeader, JobsLink } from '@/components/AppHeader'
 import { Badge } from '@/components/ui/badge'
@@ -124,7 +124,11 @@ function JobRow({ jobId, index }: { jobId: string; index: number }) {
 // orchestrator endpoint, keeping the page a pure function of its URL
 // (refresh-safe, shareable) without adding server surface area the task
 // doc's audit found unnecessary. See docs/tasks/TASK-apply-to-batch.md.
-export default function BatchProgressPage() {
+// useSearchParams() bails the whole client tree out of static prerendering
+// unless it's wrapped in a Suspense boundary above the component that calls
+// it (Next.js 16.3's own use-search-params.md) -- BatchProgressPage below is
+// that boundary; this component holds the actual page logic.
+function BatchProgressContent() {
   const params = useParams<{ pipelineId: string }>()
   const searchParams = useSearchParams()
   const jobIdsParam = searchParams.get('jobs') ?? ''
@@ -161,5 +165,36 @@ export default function BatchProgressPage() {
         )}
       </div>
     </div>
+  )
+}
+
+// The route param (pipelineId) is available without Suspense -- only the
+// "jobs" query param needs it -- so the fallback header shows the real
+// pipelineId instead of a placeholder; only the job list below is deferred.
+function BatchProgressFallback() {
+  const params = useParams<{ pipelineId: string }>()
+  return (
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <AppHeader
+        crumbs={[{ label: 'Editor', href: '/editor' }, { label: 'Batch' }]}
+        right={
+          <>
+            <span className="truncate font-mono text-[11px] text-muted-foreground">{params.pipelineId}</span>
+            <JobsLink />
+          </>
+        }
+      />
+      <div className="mx-auto flex w-full max-w-xl flex-1 items-center justify-center px-4 py-6">
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
+      </div>
+    </div>
+  )
+}
+
+export default function BatchProgressPage() {
+  return (
+    <Suspense fallback={<BatchProgressFallback />}>
+      <BatchProgressContent />
+    </Suspense>
   )
 }

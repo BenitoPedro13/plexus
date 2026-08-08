@@ -55,6 +55,11 @@ export class UploadService implements OnModuleInit {
       accessKey: process.env.MINIO_ACCESS_KEY ?? '',
       secretKey: process.env.MINIO_SECRET_KEY ?? '',
       useSSL: process.env.MINIO_USE_SSL === 'true',
+      // Path-style (bucket in the URL path) is the client default and matches
+      // self-hosted MinIO (infra/docker-compose.yml). Railway's managed Bucket
+      // is virtual-host-style only (bucket as a subdomain) — see
+      // docs/tasks/TASK-deploy-railway.md — so MINIO_PATH_STYLE=false flips it.
+      pathStyle: process.env.MINIO_PATH_STYLE !== 'false',
     });
   }
 

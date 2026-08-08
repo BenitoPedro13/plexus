@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { AppHeader, JobsLink } from '@/components/AppHeader'
 import { Dropzone } from '@/components/Dropzone'
 import { Button } from '@/components/ui/button'
@@ -47,7 +47,11 @@ function isQuickActionKind(value: string | null): value is QuickActionKind {
 // to that one action. A file already in hand (dropped on home's hero, or
 // dropped into the scoped dropzone) always runs immediately -- no separate
 // confirmation step. See docs/tasks/TASK-action-first-navigation.md.
-export default function QuickActionsPage() {
+// useSearchParams() bails the whole client tree out of static prerendering
+// unless it's wrapped in a Suspense boundary above the component that calls
+// it (Next.js 16.3's own use-search-params.md) -- QuickActionsPage below is
+// that boundary; this component holds the actual page logic.
+function QuickActionsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const kindParam = searchParams.get('kind')
@@ -282,5 +286,26 @@ export default function QuickActionsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Matches the "no kind" header exactly (same crumbs/JobsLink either way) so
+// nothing shifts once QuickActionsContent resolves -- only the body swaps.
+function QuickActionsFallback() {
+  return (
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <AppHeader crumbs={[{ label: 'Home', href: '/' }, { label: 'Quick Actions' }]} right={<JobsLink />} />
+      <div className="mx-auto flex w-full max-w-xl flex-1 items-center justify-center px-4 py-10">
+        <Loader2 className="size-4 animate-spin text-muted-foreground" />
+      </div>
+    </div>
+  )
+}
+
+export default function QuickActionsPage() {
+  return (
+    <Suspense fallback={<QuickActionsFallback />}>
+      <QuickActionsContent />
+    </Suspense>
   )
 }

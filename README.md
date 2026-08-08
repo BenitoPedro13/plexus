@@ -188,6 +188,40 @@ of CI; the testcontainer suite above remains the correctness authority.
 cd apps/orchestrator && pnpm test:http
 ```
 
+## Deployment
+
+Production runs on **Railway**, one project (`plexus`), six services — see
+[`docs/tasks/TASK-deploy-railway.md`](docs/tasks/TASK-deploy-railway.md) for the full
+rationale and [`docs/90-deferred-register.md`](docs/90-deferred-register.md) `D-16` /
+`D-41` / `D-42` / `D-54` for what it resolved and what it deliberately left minimal.
+
+| Service | What | Public domain |
+|---|---|---|
+| `postgres` | Railway managed Postgres | no |
+| `nats` | `nats:2.14.4-alpine`, JetStream, persistent volume | no — private network only |
+| `plexus` (bucket) | Railway Bucket, S3-compatible object storage | n/a (its own public S3 endpoint) |
+| `orchestrator` | NestJS, Railpack build | yes |
+| `worker` | Go, `workers/Dockerfile` | no |
+| `renderserver` | Go, `workers/Dockerfile.renderserver` | no — reached by `orchestrator` over the private network |
+| `web` | Next.js, Railpack build | yes |
+
+`orchestrator` and `web` build with `pnpm --filter @plexus/recipe build && pnpm --filter
+<name> build` (repo-root context, no `rootDirectory`) since both depend on the
+`@plexus/recipe` workspace package — Railway's monorepo docs call this the "shared
+monorepo" pattern. `worker`/`renderserver` don't share TS workspace code, so each gets its
+own Dockerfile with `rootDirectory: /workers`.
+
+Object storage in production is a Railway Bucket, not the self-hosted MinIO
+`infra/docker-compose.yml` uses for local dev — same S3-compatible `MINIO_*` env var
+contract on both sides, see `.env.example`'s `MINIO_PATH_STYLE`. The bucket needs its own
+CORS policy (browser presigned PUT/GET, not just the orchestrator's CORS) — set via:
+
+```sh
+aws s3api put-bucket-cors \
+  --bucket <bucket-name> --endpoint-url https://<bucket-endpoint> \
+  --cors-configuration '{"CORSRules":[{"AllowedHeaders":["*"],"AllowedMethods":["GET","PUT","POST","HEAD"],"AllowedOrigins":["https://<web-domain>"],"MaxAgeSeconds":3000}]}'
+```
+
 ## License
 
 [MIT](LICENSE)
