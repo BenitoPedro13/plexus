@@ -1,5 +1,20 @@
 # TASK: Deploy Plexus to Railway
 
+## Update (2026-08-08): `web` domain renamed to `plexus.up.railway.app`
+
+The Railway-generated domain `https://web-production-645b4.up.railway.app` was renamed to
+`https://plexus.up.railway.app` via `railway domain update <old> --domain plexus --service web`
+for a friendlier URL. Renaming replaces the domain in place — the old hostname now 404s, it
+is not kept as an alias. Two dependents were updated in the same pass (see `D-54` in
+`docs/90-deferred-register.md`, which is now resolved):
+
+- `orchestrator`'s `CORS_ORIGIN` env var → `https://plexus.up.railway.app`
+- The Railway Bucket's CORS policy `AllowedOrigins` → `https://plexus.up.railway.app`
+  (via `aws s3api put-bucket-cors`, same command as the original setup)
+
+Verified: `plexus.up.railway.app` returns `200`; the old domain returns `404`; the bucket's
+CORS config reflects the new origin (`aws s3api get-bucket-cors`).
+
 ## Result (2026-08-08)
 
 Deployed and verified end-to-end. Project `plexus` (id `07ef95d2-51f0-4669-8cdf-f89c96631840`),
