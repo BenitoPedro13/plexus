@@ -25,6 +25,21 @@ one runs. Both consume the same `Recipe` and apply its steps in true recipe orde
 translation step between what the editor shows and what `workers/`'s Go renderer later
 produces at export.
 
+## SEO & sharing
+
+`src/app/layout.tsx` sets `metadataBase`, a title template (`%s · Plexus`), and
+`openGraph`/`twitter`/`robots` metadata. `src/app/opengraph-image.tsx` and
+`twitter-image.tsx` both render a shared, generated share image
+(`src/lib/og/render.tsx`) — the design deliberately reuses this app's own darkroom-safelight
+palette, the `Dropzone` corner-bracket "photo-mount" motif, and real Geist Mono (via the
+`geist` npm package's static font files) rather than a generic template card. `robots.ts`
+and `sitemap.ts` cover `/`, `/editor`, and `/quick-actions`, and exclude the per-browser
+`/jobs` list and the dev-only `/preview-demo` harness. See
+`docs/tasks/TASK-seo-og-metadata.md` for the full rationale.
+
+`/editor`, `/jobs`, and `/quick-actions` each get a thin `layout.tsx` purely to set their
+own `<title>`, since their `page.tsx` is `'use client'` and can't export `metadata` itself.
+
 ## Env vars
 
 ```sh
@@ -35,6 +50,10 @@ cp .env.example .env.local
 `src/lib/editor/export.ts` to `POST /export`. Next.js only loads env files from this app's
 own directory, not the monorepo root's `.env.example` (that one is infra-only:
 orchestrator/worker vars).
+
+`NEXT_PUBLIC_SITE_URL` — optional; canonical site URL for `metadataBase`, absolute
+OG/Twitter image URLs, and `robots.txt`/`sitemap.xml`. Defaults to the production domain
+(`src/lib/site.ts`) if unset.
 
 ## Run
 
